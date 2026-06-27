@@ -6,13 +6,26 @@ import React, {
   useMemo,
 } from "react";
 import { useStore } from "@/store/useStore";
-import { uploadImageToGitHub } from "@/utils/imageupload";
+import {
+  uploadImageToGitHub,
+  deleteImageFromGitHub,
+} from "@/utils/imageupload";
 
 type SortField = "name" | "createdAt";
 type SortOrder = "asc" | "desc";
 
+// 全局变量，确保只同步一次
+let globalHasSynced = false;
+
 const ImageLibrary: React.FC = () => {
-  const { images, addImage, removeImage, addCardToScene } = useStore();
+  const {
+    images,
+    addImage,
+    removeImage,
+    addCardToScene,
+    cleanInvalidImages,
+    cleanDuplicateImages,
+  } = useStore();
   const [isExpanded, setIsExpanded] = useState(true);
   const [width, setWidth] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
@@ -24,25 +37,32 @@ const ImageLibrary: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
   const ITEMS_PER_PAGE = 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<HTMLDivElement>(null);
 
   // 启动时从 GitHub 加载已有图片
   useEffect(() => {
-    async function loadImagesFromGitHub() {
-      // 检查是否已同步过（1小时内不再重复同步）
-      const lastSync = localStorage.getItem("images_last_sync");
-      const now = Date.now();
-      if (lastSync && now - parseInt(lastSync) < 3600000) {
-        console.log("1小时内已同步过，跳过");
-        return;
-      }
+    if (globalHasSynced) {
+      console.log("全局已同步，跳过");
+      return;
+    }
 
-      // 如果本地已有图片，也跳过（避免重复）
+    // 检查 localStorage
+    const lastSync = localStorage.getItem("images_last_sync");
+    const now = Date.now();
+    if (lastSync && now - parseInt(lastSync) < 3600000) {
+      console.log("1小时内已同步过，跳过");
+      globalHasSynced = true;
+      return;
+    }
+
+    async function loadImagesFromGitHub() {
       if (images.length > 0) {
         console.log("本地已有图片，跳过同步");
         localStorage.setItem("images_last_sync", now.toString());
+        globalHasSynced = true;
         return;
       }
 
@@ -54,20 +74,16 @@ const ImageLibrary: React.FC = () => {
         if (!res.ok) throw new Error("加载失败");
 
         const files = await res.json();
-
-        // 过滤掉 .gitkeep，添加图片到 store
         const imageFiles = files.filter(
           (file: any) => file.name !== ".gitkeep",
         );
 
         for (const file of imageFiles) {
-          // 检查是否已存在
-          const exists = images.some(
-            (img: any) => img.src === file.download_url,
-          );
+          const imageUrl = encodeURI(file.download_url);
+          const exists = images.some((img: any) => img.src === imageUrl);
           if (!exists) {
             addImage({
-              src: file.download_url,
+              src: imageUrl,
               name: file.name.replace(/\.[^/.]+$/, ""),
               category: "未分类",
               width: 300,
@@ -76,8 +92,8 @@ const ImageLibrary: React.FC = () => {
           }
         }
 
-        // 标记同步时间
         localStorage.setItem("images_last_sync", now.toString());
+        globalHasSynced = true;
         console.log("同步完成，共加载", imageFiles.length, "张图片");
       } catch (error) {
         console.error("从 GitHub 加载图片失败:", error);
@@ -87,7 +103,7 @@ const ImageLibrary: React.FC = () => {
     }
 
     loadImagesFromGitHub();
-  }, []); // 空依赖数组，只在组件挂载时执行
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -98,6 +114,14 @@ const ImageLibrary: React.FC = () => {
     await Promise.all(
       Array.from(files).map(async (file) => {
         if (!file.type.startsWith("image/")) return;
+
+        // 检查是否已存在（通过文件名判断）
+        const fileName = file.name.replace(/\.[^/.]+$/, "");
+        const exists = images.some((img) => img.name === fileName);
+        if (exists) {
+          console.log("图片已存在，跳过:", fileName);
+          return;
+        }
 
         try {
           // 1. 上传到 GitHub，获取 URL
@@ -111,7 +135,6 @@ const ImageLibrary: React.FC = () => {
           await new Promise<void>((resolve, reject) => {
             img.onload = () => resolve();
             img.onerror = () => {
-              // 如果跨域获取尺寸失败，使用默认尺寸
               img.width = 300;
               img.height = 300;
               resolve();
@@ -122,7 +145,7 @@ const ImageLibrary: React.FC = () => {
           // 3. 保存 URL 到 store（IndexedDB 只存 URL）
           addImage({
             src: imageUrl,
-            name: file.name.replace(/\.[^/.]+$/, ""),
+            name: fileName,
             category: "未分类",
             width: img.width,
             height: img.height,
@@ -136,6 +159,50 @@ const ImageLibrary: React.FC = () => {
 
     setIsUploading(false);
     e.target.value = "";
+  };
+
+  // 清理重复和无效图片
+  const handleCleanImages = async () => {
+    if (!confirm("清理重复和无效的图片？此操作不可撤销。")) return;
+
+    setIsCleaning(true);
+    try {
+      // 1. 清理本地重复图片
+      cleanDuplicateImages();
+
+      // 2. 清理无效 URL
+      await cleanInvalidImages();
+
+      // 3. 获取 GitHub 上的图片列表
+      const res = await fetch(
+        "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
+      );
+      if (res.ok) {
+        const files = await res.json();
+        const githubFiles = files
+          .filter((file: any) => file.name !== ".gitkeep")
+          .map((file: any) => file.name);
+
+        // 4. 删除 GitHub 上不在本地列表中的图片
+        const localNames = new Set(images.map((img) => img.name));
+        for (const fileName of githubFiles) {
+          if (!localNames.has(fileName.replace(/\.[^/.]+$/, ""))) {
+            try {
+              await deleteImageFromGitHub(fileName);
+            } catch (error) {
+              console.error("删除 GitHub 图片失败:", fileName, error);
+            }
+          }
+        }
+      }
+
+      alert("清理完成");
+    } catch (error) {
+      console.error("清理失败:", error);
+      alert("清理失败，请查看控制台");
+    } finally {
+      setIsCleaning(false);
+    }
   };
 
   // 排序切换
@@ -338,7 +405,8 @@ const ImageLibrary: React.FC = () => {
                   : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
             >
-              名称{sortField === "name" && (sortOrder === "asc" ? " ▲" : " ▼")}
+              名称
+              {sortField === "name" && (sortOrder === "asc" ? " ▲" : " ▼")}
             </button>
             <button
               onClick={() => handleSortChange("createdAt")}
@@ -378,6 +446,21 @@ const ImageLibrary: React.FC = () => {
               }`}
             >
               {isBatchMode ? "完成" : "多选"}
+            </button>
+          </div>
+
+          {/* 清理按钮 */}
+          <div className="flex items-center gap-1 mb-2">
+            <button
+              onClick={handleCleanImages}
+              disabled={isCleaning}
+              className={`w-full py-1 rounded text-xs ${
+                isCleaning
+                  ? "bg-purple-300 text-white cursor-not-allowed"
+                  : "bg-purple-500 text-white hover:bg-purple-600"
+              }`}
+            >
+              {isCleaning ? "清理中..." : "🧹 清理重复"}
             </button>
           </div>
 
@@ -447,10 +530,11 @@ const ImageLibrary: React.FC = () => {
                             );
                             const target = e.target as HTMLImageElement;
                             target.style.display = "none";
-                            // 显示占位文字
                             const parent = target.parentElement;
                             if (parent) {
-                              parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-xs text-gray-400">${image.name?.charAt(0) || "?"}</div>`;
+                              parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-xs text-gray-400">${
+                                image.name?.charAt(0) || "?"
+                              }</div>`;
                             }
                           }}
                         />
