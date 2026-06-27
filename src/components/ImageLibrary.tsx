@@ -6,6 +6,7 @@ import React, {
   useMemo,
 } from "react";
 import { useStore } from "@/store/useStore";
+import { uploadImageToGitHub } from "@/utils/imageUpload";
 
 type SortField = "name" | "createdAt";
 type SortOrder = "asc" | "desc";
@@ -21,72 +22,57 @@ const ImageLibrary: React.FC = () => {
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [isUploading, setIsUploading] = useState(false);
   const ITEMS_PER_PAGE = 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<HTMLDivElement>(null);
 
-  // 压缩图片函数
-  const compressImage = (
-    src: string,
-    maxWidth: number = 300,
-    quality: number = 0.7,
-  ): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        let w = img.width;
-        let h = img.height;
-        if (w > h && w > maxWidth) {
-          h = (h * maxWidth) / w;
-          w = maxWidth;
-        } else if (h > maxWidth) {
-          w = (w * maxWidth) / h;
-          h = maxWidth;
-        }
-        canvas.width = w;
-        canvas.height = h;
-        ctx?.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.src = src;
-    });
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+
+    setIsUploading(true);
+
     await Promise.all(
       Array.from(files).map(async (file) => {
         if (!file.type.startsWith("image/")) return;
-        return new Promise<void>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = async (event) => {
-            const originalSrc = event.target?.result as string;
-            const compressedSrc = await compressImage(originalSrc, 300, 0.7);
-            const originalSize = originalSrc.length;
-            const compressedSize = compressedSrc.length;
-            console.log(
-              `图片压缩: ${file.name} ${(originalSize / 1024).toFixed(1)}KB → ${(compressedSize / 1024).toFixed(1)}KB (${((1 - compressedSize / originalSize) * 100).toFixed(0)}%减小)`,
-            );
-            const img = new Image();
-            img.onload = () => {
-              addImage({
-                src: compressedSrc,
-                name: file.name.replace(/\.[^/.]+$/, ""),
-                category: "未分类",
-                width: img.width,
-                height: img.height,
-              });
+
+        try {
+          // 1. 上传到 GitHub，获取 URL
+          const imageUrl = await uploadImageToGitHub(file);
+          console.log("上传成功:", imageUrl);
+
+          // 2. 获取图片尺寸
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => {
+              // 如果跨域获取尺寸失败，使用默认尺寸
+              img.width = 300;
+              img.height = 300;
               resolve();
             };
-            img.src = compressedSrc;
-          };
-          reader.readAsDataURL(file);
-        });
+            img.src = imageUrl;
+          });
+
+          // 3. 保存 URL 到 store（IndexedDB 只存 URL）
+          addImage({
+            src: imageUrl,
+            name: file.name.replace(/\.[^/.]+$/, ""),
+            category: "未分类",
+            width: img.width,
+            height: img.height,
+          });
+        } catch (error) {
+          console.error("上传失败:", error);
+          alert("图片上传失败，请检查 Token 配置或网络连接");
+        }
       }),
     );
+
+    setIsUploading(false);
     e.target.value = "";
   };
 
@@ -302,9 +288,14 @@ const ImageLibrary: React.FC = () => {
           <div className="flex items-center gap-1 mb-2">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex-1 bg-[#4CAF50] text-white py-1 rounded text-xs hover:bg-green-600"
+              disabled={isUploading}
+              className={`flex-1 py-1 rounded text-xs ${
+                isUploading
+                  ? "bg-gray-400 text-white cursor-not-allowed"
+                  : "bg-[#4CAF50] text-white hover:bg-green-600"
+              }`}
             >
-              + 添加
+              {isUploading ? "上传中..." : "+ 添加"}
             </button>
             <button
               onClick={() => {
@@ -376,6 +367,7 @@ const ImageLibrary: React.FC = () => {
                         <img
                           src={image.src}
                           alt={image.name}
+                          crossOrigin="anonymous"
                           className="w-full h-full object-cover pointer-events-none"
                           draggable={false}
                           onError={(e) => {
@@ -384,8 +376,13 @@ const ImageLibrary: React.FC = () => {
                               image.id,
                               image.name,
                             );
-                            (e.target as HTMLImageElement).style.display =
-                              "none";
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = "none";
+                            // 显示占位文字
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-xs text-gray-400">${image.name?.charAt(0) || "?"}</div>`;
+                            }
                           }}
                         />
                       ) : (
