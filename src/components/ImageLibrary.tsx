@@ -24,25 +24,32 @@ const ImageLibrary: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const hasSynced = useRef(false); // 新增
   const ITEMS_PER_PAGE = 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<HTMLDivElement>(null);
 
   // 启动时从 GitHub 加载已有图片
   useEffect(() => {
+     if (hasSynced.current) {
+      console.log('已经同步过，跳过');
+      return;
+    }
     async function loadImagesFromGitHub() {
       // 检查是否已同步过（1小时内不再重复同步）
       const lastSync = localStorage.getItem("images_last_sync");
       const now = Date.now();
-      if (lastSync && now - parseInt(lastSync) < 3600000) {
+      if (lastSync && now - parseInt(lastSync) < 60000) {
         console.log("1小时内已同步过，跳过");
+        hasSynced.current = true; // 标记已同步
         return;
       }
-
+       async function loadImagesFromGitHub() {
       // 如果本地已有图片，也跳过（避免重复）
       if (images.length > 0) {
         console.log("本地已有图片，跳过同步");
         localStorage.setItem("images_last_sync", now.toString());
+        hasSynced.current = true; // 标记已同步
         return;
       }
 
@@ -66,7 +73,7 @@ const ImageLibrary: React.FC = () => {
           const exists = images.some((img: any) => img.src === imageUrl);
           if (!exists) {
             addImage({
-              src: file.download_url,
+              src: imageUrl,
               name: file.name.replace(/\.[^/.]+$/, ""),
               category: "未分类",
               width: 300,
@@ -77,6 +84,7 @@ const ImageLibrary: React.FC = () => {
 
         // 标记同步时间
         localStorage.setItem("images_last_sync", now.toString());
+        hasSynced.current = true; // 标记已同步
         console.log("同步完成，共加载", imageFiles.length, "张图片");
       } catch (error) {
         console.error("从 GitHub 加载图片失败:", error);
