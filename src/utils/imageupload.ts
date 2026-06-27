@@ -53,7 +53,7 @@ export async function uploadImageToGitHub(file: File): Promise<string> {
   return data.content.download_url;
 }
 
-// 删除 GitHub 上的文件
+// 删除 GitHub 上的文件（仅在用户明确删除单张图片时调用，清理重复时绝不调用）
 export async function deleteImageFromGitHub(fileName: string): Promise<void> {
   const path = `images/${fileName}`;
 
@@ -68,15 +68,15 @@ export async function deleteImageFromGitHub(fileName: string): Promise<void> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        message: "删除重复图片",
+        message: "删除图片",
         sha: sha,
       }),
     });
 
     if (!res.ok) throw new Error("删除失败");
-    console.log("已删除:", fileName);
+    console.log("已删除 GitHub 文件:", fileName);
   } catch (error) {
-    console.error("删除失败:", error);
+    console.error("删除 GitHub 文件失败:", error);
     throw error;
   }
 }

@@ -54,7 +54,7 @@ interface StoreState {
   exportScene: () => string;
   importScene: (json: string) => void;
 
-  // 新增：清理功能
+  // 清理功能（只清理本地 IndexedDB，绝不删除 GitHub）
   cleanInvalidImages: () => Promise<void>;
   cleanDuplicateImages: () => void;
 }
@@ -319,10 +319,12 @@ export const useStore = create<StoreState>()(
         }
       },
 
-      // 新增：清理无效的图片（URL 失效的）
+      // ========== 清理功能（只清理本地 IndexedDB，绝不删除 GitHub 文件） ==========
+
       cleanInvalidImages: async () => {
         const state = get();
         const validImages: CardImage[] = [];
+        let invalidCount = 0;
 
         for (const image of state.images) {
           try {
@@ -330,36 +332,49 @@ export const useStore = create<StoreState>()(
             if (res.ok) {
               validImages.push(image);
             } else {
-              console.log("删除无效图片:", image.name);
+              invalidCount++;
+              console.log("URL 无效，从本地移除:", image.name);
             }
           } catch {
-            console.log("删除无效图片:", image.name);
+            invalidCount++;
+            console.log("URL 无效，从本地移除:", image.name);
           }
+        }
+
+        if (invalidCount > 0) {
+          console.log(
+            "共清理无效图片:",
+            invalidCount,
+            "张（仅本地，不删 GitHub）",
+          );
         }
 
         set({ images: validImages });
       },
 
-      // 新增：清理重复的图片（保留第一个）
       cleanDuplicateImages: () => {
         set((state) => {
-          const uniqueImages = new Map<string, CardImage>();
-          const duplicates: string[] = [];
+          const seen = new Map<string, CardImage>();
+          const duplicates: CardImage[] = [];
 
           state.images.forEach((img) => {
-            if (uniqueImages.has(img.name)) {
-              duplicates.push(img.id);
+            if (seen.has(img.name)) {
+              duplicates.push(img);
             } else {
-              uniqueImages.set(img.name, img);
+              seen.set(img.name, img);
             }
           });
 
           if (duplicates.length > 0) {
-            console.log("删除重复图片:", duplicates.length, "张");
+            console.log(
+              "清理重复图片:",
+              duplicates.length,
+              "张（仅本地，不删 GitHub）",
+            );
           }
 
           return {
-            images: state.images.filter((img) => !duplicates.includes(img.id)),
+            images: state.images.filter((img) => !duplicates.includes(img)),
           };
         });
       },

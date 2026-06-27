@@ -81,6 +81,7 @@ const ImageLibrary: React.FC = () => {
     }
   };
 
+  // ========== 上传前双重检查：本地 + GitHub ==========
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -158,44 +159,24 @@ const ImageLibrary: React.FC = () => {
     e.target.value = "";
   };
 
-  // 清理重复和无效图片
+  // ========== 清理按钮：只清理本地 IndexedDB，绝不删除 GitHub ==========
   const handleCleanImages = async () => {
-    if (!confirm("清理重复和无效的图片？此操作不可撤销。")) return;
+    if (
+      !confirm(
+        "清理重复和无效的图片？\n（仅清理本地显示，不会删除 GitHub 文件）",
+      )
+    )
+      return;
 
     setIsCleaning(true);
     try {
-      // 1. 清理本地重复图片
+      // 1. 清理本地重复图片（只删 IndexedDB，不删 GitHub）
       cleanDuplicateImages();
 
-      // 2. 清理无效 URL
+      // 2. 清理无效 URL（只删 IndexedDB，不删 GitHub）
       await cleanInvalidImages();
 
-      // 3. 获取 GitHub 上的图片列表
-      const res = await fetch(
-        "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
-      );
-      if (res.ok) {
-        const files = await res.json();
-        const githubFiles = files
-          .filter((file: any) => file.name !== ".gitkeep")
-          .map((file: any) => file.name);
-
-        // 4. 删除 GitHub 上不在本地列表中的图片
-        const localNames = new Set(images.map((img) => img.name));
-        for (const fileName of githubFiles) {
-          const nameWithoutExt = fileName.replace(/\.[^/.]+$/, "");
-          const nameWithoutTimestamp = nameWithoutExt.replace(/^\d+_/, "");
-          if (!localNames.has(nameWithoutTimestamp)) {
-            try {
-              await deleteImageFromGitHub(fileName);
-            } catch (error) {
-              console.error("删除 GitHub 图片失败:", fileName, error);
-            }
-          }
-        }
-      }
-
-      alert("清理完成");
+      alert("清理完成！仅移除了本地重复/无效记录，GitHub 文件不受影响。");
     } catch (error) {
       console.error("清理失败:", error);
       alert("清理失败，请查看控制台");
@@ -467,7 +448,7 @@ const ImageLibrary: React.FC = () => {
                   : "bg-purple-500 text-white hover:bg-purple-600"
               }`}
             >
-              {isCleaning ? "清理中..." : "🧹 清理重复"}
+              {isCleaning ? "清理中..." : "🧹 清理重复/无效"}
             </button>
           </div>
 
