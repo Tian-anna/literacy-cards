@@ -24,12 +24,15 @@ const ImageLibrary: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const hasLoaded = useRef(false); // 新增
   const ITEMS_PER_PAGE = 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<HTMLDivElement>(null);
 
   // 启动时从 GitHub 加载已有图片
   useEffect(() => {
+    if (hasLoaded.current) return;
+    hasLoaded.current = true;
     async function loadImagesFromGitHub() {
       // 如果本地已有图片，不重复加载
       if (images.length > 0) return;
