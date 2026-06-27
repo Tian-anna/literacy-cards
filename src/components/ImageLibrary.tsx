@@ -14,6 +14,9 @@ import {
 type SortField = "name" | "createdAt";
 type SortOrder = "asc" | "desc";
 
+// 每批上传数量，避免同时发送太多请求
+const BATCH_SIZE = 3;
+
 const ImageLibrary: React.FC = () => {
   const {
     images,
@@ -33,6 +36,10 @@ const ImageLibrary: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({
+    current: 0,
+    total: 0,
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -81,82 +88,133 @@ const ImageLibrary: React.FC = () => {
     }
   };
 
-  // ========== 上传前双重检查：本地 + GitHub ==========
+  // ========== 分批串行上传：避免同时发送太多请求 ==========
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
-    setIsUploading(true);
-
-    await Promise.all(
-      Array.from(files).map(async (file) => {
-        if (!file.type.startsWith("image/")) return;
-
-        const fileName = file.name.replace(/\.[^/.]+$/, "");
-
-        // 1. 检查本地是否已存在
-        const existsLocal = images.some((img) => img.name === fileName);
-        if (existsLocal) {
-          console.log("本地已存在，跳过:", fileName);
-          return;
-        }
-
-        // 2. 检查 GitHub 是否已有同名文件
-        try {
-          const res = await fetch(
-            "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
-          );
-          if (res.ok) {
-            const githubFiles = await res.json();
-            const existsGitHub = githubFiles.some(
-              (f: any) =>
-                f.name.includes(`_${fileName}.`) || f.name === file.name,
-            );
-            if (existsGitHub) {
-              console.log("GitHub 已存在，跳过:", fileName);
-              return;
-            }
-          }
-        } catch (error) {
-          console.error("检查 GitHub 失败:", error);
-        }
-
-        // 3. 上传到 GitHub
-        try {
-          const imageUrl = await uploadImageToGitHub(file);
-          console.log("上传成功:", imageUrl);
-
-          // 4. 获取图片尺寸
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve();
-            img.onerror = () => {
-              img.width = 300;
-              img.height = 300;
-              resolve();
-            };
-            img.src = imageUrl;
-          });
-
-          // 5. 保存 URL 到 store
-          addImage({
-            src: imageUrl,
-            name: fileName,
-            category: "未分类",
-            width: img.width,
-            height: img.height,
-          });
-        } catch (error) {
-          console.error("上传失败:", error);
-          alert("图片上传失败，请检查 Token 配置或网络连接");
-        }
-      }),
+    // 过滤出图片文件
+    const imageFiles = Array.from(files).filter((file) =>
+      file.type.startsWith("image/"),
     );
 
+    if (imageFiles.length === 0) {
+      alert("请选择图片文件");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress({ current: 0, total: imageFiles.length });
+
+    let successCount = 0;
+    let skipCount = 0;
+    let failCount = 0;
+
+    // 先获取 GitHub 上的文件列表（避免重复请求）
+    let githubFiles: any[] = [];
+    try {
+      const res = await fetch(
+        "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
+      );
+      if (res.ok) {
+        githubFiles = await res.json();
+      }
+    } catch (error) {
+      console.error("获取 GitHub 文件列表失败:", error);
+    }
+
+    // 分批串行上传
+    for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
+      const batch = imageFiles.slice(i, i + BATCH_SIZE);
+
+      // 每批内部并行上传（最多 BATCH_SIZE 个同时请求）
+      const batchResults = await Promise.all(
+        batch.map(async (file) => {
+          const fileName = file.name.replace(/\.[^/.]+$/, "");
+
+          // 检查 1：本地是否已存在
+          const existsLocal = images.some((img) => img.name === fileName);
+          if (existsLocal) {
+            console.log("本地已存在，跳过:", fileName);
+            return { status: "skip", name: fileName };
+          }
+
+          // 检查 2：GitHub 是否已有同名文件
+          const existsGitHub = githubFiles.some(
+            (f: any) =>
+              f.name.includes(`_${fileName}.`) || f.name === file.name,
+          );
+          if (existsGitHub) {
+            console.log("GitHub 已存在，跳过:", fileName);
+            return { status: "skip", name: fileName };
+          }
+
+          // 上传
+          try {
+            const imageUrl = await uploadImageToGitHub(file);
+
+            // 获取图片尺寸
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+
+            await new Promise<void>((resolve) => {
+              img.onload = () => resolve();
+              img.onerror = () => {
+                img.width = 300;
+                img.height = 300;
+                resolve();
+              };
+              img.src = imageUrl;
+            });
+
+            // 保存到 store
+            addImage({
+              src: imageUrl,
+              name: fileName,
+              category: "未分类",
+              width: img.width,
+              height: img.height,
+            });
+
+            console.log("上传成功:", fileName);
+            return { status: "success", name: fileName };
+          } catch (error) {
+            console.error("上传失败:", fileName, error);
+            return { status: "fail", name: fileName };
+          }
+        }),
+      );
+
+      // 统计结果
+      batchResults.forEach((result) => {
+        if (result.status === "success") successCount++;
+        else if (result.status === "skip") skipCount++;
+        else failCount++;
+      });
+
+      // 更新进度
+      setUploadProgress({
+        current: Math.min(i + BATCH_SIZE, imageFiles.length),
+        total: imageFiles.length,
+      });
+
+      // 每批之间添加短暂延迟，避免触发速率限制
+      if (i + BATCH_SIZE < imageFiles.length) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
     setIsUploading(false);
+    setUploadProgress({ current: 0, total: 0 });
     e.target.value = "";
+
+    // 显示上传结果
+    const messages: string[] = [];
+    if (successCount > 0) messages.push(`成功 ${successCount} 张`);
+    if (skipCount > 0) messages.push(`跳过 ${skipCount} 张（已存在）`);
+    if (failCount > 0) messages.push(`失败 ${failCount} 张`);
+
+    alert(messages.join("，") || "上传完成");
   };
 
   // ========== 清理按钮：只清理本地 IndexedDB，绝不删除 GitHub ==========
@@ -420,7 +478,9 @@ const ImageLibrary: React.FC = () => {
                   : "bg-[#4CAF50] text-white hover:bg-green-600"
               }`}
             >
-              {isUploading ? "上传中..." : "+ 添加"}
+              {isUploading
+                ? `上传中 ${uploadProgress.current}/${uploadProgress.total}`
+                : "+ 添加"}
             </button>
             <button
               onClick={() => {
