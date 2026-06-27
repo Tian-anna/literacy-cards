@@ -14,9 +14,6 @@ import {
 type SortField = "name" | "createdAt";
 type SortOrder = "asc" | "desc";
 
-// 全局变量，确保只同步一次
-let globalHasSynced = false;
-
 const ImageLibrary: React.FC = () => {
   const {
     images,
@@ -38,72 +35,51 @@ const ImageLibrary: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const ITEMS_PER_PAGE = 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<HTMLDivElement>(null);
 
-  // 启动时从 GitHub 加载已有图片
-  useEffect(() => {
-    if (globalHasSynced) {
-      console.log("全局已同步，跳过");
-      return;
+  // 手动同步 GitHub 图片
+  const handleSyncFromGitHub = async () => {
+    if (images.length > 0) {
+      if (!confirm("本地已有图片，同步可能导致重复。是否继续？")) return;
     }
 
-    // 检查 localStorage
-    const lastSync = localStorage.getItem("images_last_sync");
-    const now = Date.now();
-    if (lastSync && now - parseInt(lastSync) < 3600000) {
-      console.log("1小时内已同步过，跳过");
-      globalHasSynced = true;
-      return;
-    }
+    setIsSyncing(true);
+    try {
+      const res = await fetch(
+        "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
+      );
+      if (!res.ok) throw new Error("加载失败");
 
-    async function loadImagesFromGitHub() {
-      if (images.length > 0) {
-        console.log("本地已有图片，跳过同步");
-        localStorage.setItem("images_last_sync", now.toString());
-        globalHasSynced = true;
-        return;
-      }
+      const files = await res.json();
+      const imageFiles = files.filter((file: any) => file.name !== ".gitkeep");
 
-      setIsLoading(true);
-      try {
-        const res = await fetch(
-          "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
-        );
-        if (!res.ok) throw new Error("加载失败");
-
-        const files = await res.json();
-        const imageFiles = files.filter(
-          (file: any) => file.name !== ".gitkeep",
-        );
-
-        for (const file of imageFiles) {
-          const imageUrl = encodeURI(file.download_url);
-          const exists = images.some((img: any) => img.src === imageUrl);
-          if (!exists) {
-            addImage({
-              src: imageUrl,
-              name: file.name.replace(/\.[^/.]+$/, ""),
-              category: "未分类",
-              width: 300,
-              height: 300,
-            });
-          }
+      let addedCount = 0;
+      for (const file of imageFiles) {
+        const imageUrl = encodeURI(file.download_url);
+        const exists = images.some((img: any) => img.src === imageUrl);
+        if (!exists) {
+          addImage({
+            src: imageUrl,
+            name: file.name.replace(/\.[^/.]+$/, ""),
+            category: "未分类",
+            width: 300,
+            height: 300,
+          });
+          addedCount++;
         }
-
-        localStorage.setItem("images_last_sync", now.toString());
-        globalHasSynced = true;
-        console.log("同步完成，共加载", imageFiles.length, "张图片");
-      } catch (error) {
-        console.error("从 GitHub 加载图片失败:", error);
-      } finally {
-        setIsLoading(false);
       }
-    }
 
-    loadImagesFromGitHub();
-  }, []);
+      alert(`同步完成，新增 ${addedCount} 张图片`);
+    } catch (error) {
+      console.error("从 GitHub 加载图片失败:", error);
+      alert("同步失败，请查看控制台");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -396,12 +372,20 @@ const ImageLibrary: React.FC = () => {
       {/* 图库内容 */}
       {isExpanded && (
         <div className="flex-1 overflow-y-auto p-2">
-          {/* 加载提示 */}
-          {isLoading && (
-            <div className="text-center text-gray-400 py-4">
-              <p className="text-xs">正在加载图片...</p>
-            </div>
-          )}
+          {/* 同步按钮 */}
+          <div className="flex items-center gap-1 mb-2">
+            <button
+              onClick={handleSyncFromGitHub}
+              disabled={isSyncing}
+              className={`flex-1 py-1 rounded text-xs ${
+                isSyncing
+                  ? "bg-blue-300 text-white cursor-not-allowed"
+                  : "bg-blue-500 text-white hover:bg-blue-600"
+              }`}
+            >
+              {isSyncing ? "同步中..." : "🔄 同步"}
+            </button>
+          </div>
 
           {/* 搜索框 */}
           <div className="mb-2">
@@ -515,7 +499,9 @@ const ImageLibrary: React.FC = () => {
           {/* 图片列表 */}
           {totalCount === 0 ? (
             <div className="text-center text-gray-400 py-4">
-              <p className="text-xs">{searchTerm ? "无结果" : "暂无图片"}</p>
+              <p className="text-xs">
+                {searchTerm ? "无结果" : "暂无图片，点击 🔄 同步从 GitHub 加载"}
+              </p>
             </div>
           ) : (
             <div>
