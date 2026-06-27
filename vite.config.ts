@@ -3,8 +3,8 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
-  base: "/literacy-cards/", // ← 添加这行
   plugins: [react()],
+  base: "/literacy-cards/", // ← 添加这行
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
