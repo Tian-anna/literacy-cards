@@ -329,25 +329,58 @@ const ImageLibrary: React.FC = () => {
     }
   };
 
-  // 拖拽调整宽度
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // ========== 拖拽调整宽度：同时支持鼠标和触摸 ==========
+  const startResizing = useCallback((clientX: number) => {
     setIsResizing(true);
   }, []);
 
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startResizing(e.clientX);
+    },
+    [startResizing],
+  );
+
+  // 触摸开始
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      e.stopPropagation();
+      const touch = e.touches[0];
+      startResizing(touch.clientX);
+    },
+    [startResizing],
+  );
+
   useEffect(() => {
     if (!isResizing) return;
+
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = e.clientX;
       setWidth(Math.max(80, newWidth));
     };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault(); // 阻止默认滚动行为
+      const touch = e.touches[0];
+      const newWidth = touch.clientX;
+      setWidth(Math.max(80, newWidth));
+    };
+
     const handleMouseUp = () => setIsResizing(false);
+    const handleTouchEnd = () => setIsResizing(false);
+
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    document.addEventListener("touchend", handleTouchEnd);
+
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("touchmove", handleTouchMove);
+      document.removeEventListener("touchend", handleTouchEnd);
     };
   }, [isResizing]);
 
@@ -359,20 +392,22 @@ const ImageLibrary: React.FC = () => {
         minWidth: isExpanded ? "80px" : "40px",
       }}
     >
-      {/* 拖拽调整条 */}
+      {/* 拖拽调整条 — 同时支持鼠标和触摸 */}
       {isExpanded && (
         <div
           ref={resizeRef}
           onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
           style={{
-            width: "12px",
+            width: "24px",
             background: isResizing ? "rgba(76,175,80,0.3)" : "transparent",
             cursor: "ew-resize",
             position: "absolute",
             top: 0,
             bottom: 0,
-            right: "-6px",
+            right: "-12px",
             zIndex: 100,
+            touchAction: "none", // 关键：禁止浏览器默认触摸行为
           }}
           title="左右拖拽调整宽度"
         />
