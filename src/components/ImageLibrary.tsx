@@ -115,20 +115,41 @@ const ImageLibrary: React.FC = () => {
       Array.from(files).map(async (file) => {
         if (!file.type.startsWith("image/")) return;
 
-        // 检查是否已存在（通过文件名判断）
         const fileName = file.name.replace(/\.[^/.]+$/, "");
-        const exists = images.some((img) => img.name === fileName);
-        if (exists) {
-          console.log("图片已存在，跳过:", fileName);
+
+        // 1. 检查本地是否已存在
+        const existsLocal = images.some((img) => img.name === fileName);
+        if (existsLocal) {
+          console.log("本地已存在，跳过:", fileName);
           return;
         }
 
+        // 2. 检查 GitHub 是否已有同名文件
         try {
-          // 1. 上传到 GitHub，获取 URL
+          const res = await fetch(
+            "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
+          );
+          if (res.ok) {
+            const githubFiles = await res.json();
+            const existsGitHub = githubFiles.some(
+              (f: any) =>
+                f.name.includes(`_${fileName}.`) || f.name === file.name,
+            );
+            if (existsGitHub) {
+              console.log("GitHub 已存在，跳过:", fileName);
+              return;
+            }
+          }
+        } catch (error) {
+          console.error("检查 GitHub 失败:", error);
+        }
+
+        // 3. 上传到 GitHub
+        try {
           const imageUrl = await uploadImageToGitHub(file);
           console.log("上传成功:", imageUrl);
 
-          // 2. 获取图片尺寸
+          // 4. 获取图片尺寸
           const img = new Image();
           img.crossOrigin = "anonymous";
 
@@ -142,7 +163,7 @@ const ImageLibrary: React.FC = () => {
             img.src = imageUrl;
           });
 
-          // 3. 保存 URL 到 store（IndexedDB 只存 URL）
+          // 5. 保存 URL 到 store
           addImage({
             src: imageUrl,
             name: fileName,
@@ -186,7 +207,9 @@ const ImageLibrary: React.FC = () => {
         // 4. 删除 GitHub 上不在本地列表中的图片
         const localNames = new Set(images.map((img) => img.name));
         for (const fileName of githubFiles) {
-          if (!localNames.has(fileName.replace(/\.[^/.]+$/, ""))) {
+          const nameWithoutExt = fileName.replace(/\.[^/.]+$/, "");
+          const nameWithoutTimestamp = nameWithoutExt.replace(/^\d+_/, "");
+          if (!localNames.has(nameWithoutTimestamp)) {
             try {
               await deleteImageFromGitHub(fileName);
             } catch (error) {
