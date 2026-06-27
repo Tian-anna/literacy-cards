@@ -6,7 +6,7 @@ import React, {
   useMemo,
 } from "react";
 import { useStore } from "@/store/useStore";
-import { uploadImageToGitHub } from "@/utils/imageUpload";
+import { uploadImageToGitHub } from "@/utils/imageupload";
 
 type SortField = "name" | "createdAt";
 type SortOrder = "asc" | "desc";
