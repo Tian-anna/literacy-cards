@@ -14,9 +14,6 @@ import {
 type SortField = "name" | "createdAt";
 type SortOrder = "asc" | "desc";
 
-// 每批上传数量，避免同时发送太多请求
-const BATCH_SIZE = 3;
-
 const ImageLibrary: React.FC = () => {
   const {
     images,
@@ -88,7 +85,7 @@ const ImageLibrary: React.FC = () => {
     }
   };
 
-  // ========== 分批串行上传：避免同时发送太多请求 ==========
+  // ========== 完全串行上传：一张一张传，避免 SHA 冲突 ==========
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -123,84 +120,75 @@ const ImageLibrary: React.FC = () => {
       console.error("获取 GitHub 文件列表失败:", error);
     }
 
-    // 分批串行上传
-    for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
-      const batch = imageFiles.slice(i, i + BATCH_SIZE);
-
-      // 每批内部并行上传（最多 BATCH_SIZE 个同时请求）
-      const batchResults = await Promise.all(
-        batch.map(async (file) => {
-          const fileName = file.name.replace(/\.[^/.]+$/, "");
-
-          // 检查 1：本地是否已存在
-          const existsLocal = images.some((img) => img.name === fileName);
-          if (existsLocal) {
-            console.log("本地已存在，跳过:", fileName);
-            return { status: "skip", name: fileName };
-          }
-
-          // 检查 2：GitHub 是否已有同名文件
-          const existsGitHub = githubFiles.some(
-            (f: any) =>
-              f.name.includes(`_${fileName}.`) || f.name === file.name,
-          );
-          if (existsGitHub) {
-            console.log("GitHub 已存在，跳过:", fileName);
-            return { status: "skip", name: fileName };
-          }
-
-          // 上传
-          try {
-            const imageUrl = await uploadImageToGitHub(file);
-
-            // 获取图片尺寸
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-
-            await new Promise<void>((resolve) => {
-              img.onload = () => resolve();
-              img.onerror = () => {
-                img.width = 300;
-                img.height = 300;
-                resolve();
-              };
-              img.src = imageUrl;
-            });
-
-            // 保存到 store
-            addImage({
-              src: imageUrl,
-              name: fileName,
-              category: "未分类",
-              width: img.width,
-              height: img.height,
-            });
-
-            console.log("上传成功:", fileName);
-            return { status: "success", name: fileName };
-          } catch (error) {
-            console.error("上传失败:", fileName, error);
-            return { status: "fail", name: fileName };
-          }
-        }),
-      );
-
-      // 统计结果
-      batchResults.forEach((result) => {
-        if (result.status === "success") successCount++;
-        else if (result.status === "skip") skipCount++;
-        else failCount++;
-      });
+    // 完全串行上传：一张一张传
+    for (let i = 0; i < imageFiles.length; i++) {
+      const file = imageFiles[i];
+      const fileName = file.name.replace(/\.[^/.]+$/, "");
 
       // 更新进度
       setUploadProgress({
-        current: Math.min(i + BATCH_SIZE, imageFiles.length),
+        current: i + 1,
         total: imageFiles.length,
       });
 
-      // 每批之间添加短暂延迟，避免触发速率限制
-      if (i + BATCH_SIZE < imageFiles.length) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      // 检查 1：本地是否已存在
+      const existsLocal = images.some((img) => img.name === fileName);
+      if (existsLocal) {
+        console.log("本地已存在，跳过:", fileName);
+        skipCount++;
+        continue;
+      }
+
+      // 检查 2：GitHub 是否已有同名文件
+      const existsGitHub = githubFiles.some(
+        (f: any) => f.name.includes(`_${fileName}.`) || f.name === file.name,
+      );
+      if (existsGitHub) {
+        console.log("GitHub 已存在，跳过:", fileName);
+        skipCount++;
+        continue;
+      }
+
+      // 上传
+      try {
+        const imageUrl = await uploadImageToGitHub(file);
+
+        // 获取图片尺寸
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+
+        await new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => {
+            img.width = 300;
+            img.height = 300;
+            resolve();
+          };
+          img.src = imageUrl;
+        });
+
+        // 保存到 store
+        addImage({
+          src: imageUrl,
+          name: fileName,
+          category: "未分类",
+          width: img.width,
+          height: img.height,
+        });
+
+        console.log("上传成功:", fileName);
+        successCount++;
+
+        // 添加到 githubFiles，避免同一批内重复上传同名文件
+        githubFiles.push({ name: `${Date.now()}_${file.name}` });
+      } catch (error) {
+        console.error("上传失败:", fileName, error);
+        failCount++;
+      }
+
+      // 每张图片之间添加延迟，避免触发速率限制
+      if (i < imageFiles.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
       }
     }
 
