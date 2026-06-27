@@ -82,8 +82,10 @@ export const useStore = create<StoreState>()(
 
       addImage: (image) => {
         set((state) => {
-          // 检查是否已存在（通过 src 判断）
-          const exists = state.images.some((img) => img.src === image.src);
+          // 检查是否已存在（通过 src 或 name 判断）
+          const exists = state.images.some(
+            (img) => img.src === image.src || img.name === image.name,
+          );
           if (exists) {
             console.log("图片已存在，跳过:", image.name);
             return state;
