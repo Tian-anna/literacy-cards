@@ -62,6 +62,7 @@ const ImageLibrary: React.FC = () => {
 
         for (const file of imageFiles) {
           // 检查是否已存在
+          const imageUrl = encodeURI(file.download_url); // 确保这行在 for 循环内部
           const exists = images.some((img: any) => img.src === imageUrl);
           if (!exists) {
             addImage({
