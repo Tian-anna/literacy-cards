@@ -1,0 +1,452 @@
+import React, {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+} from "react";
+import { useStore } from "@/store/useStore";
+
+type SortField = "name" | "createdAt";
+type SortOrder = "asc" | "desc";
+
+const ImageLibrary: React.FC = () => {
+  const { images, addImage, removeImage, addCardToScene } = useStore();
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [width, setWidth] = useState(200);
+  const [isResizing, setIsResizing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(1);
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const ITEMS_PER_PAGE = 40;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const resizeRef = useRef<HTMLDivElement>(null);
+
+  // 压缩图片函数
+  const compressImage = (
+    src: string,
+    maxWidth: number = 300,
+    quality: number = 0.7,
+  ): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        let w = img.width;
+        let h = img.height;
+        if (w > h && w > maxWidth) {
+          h = (h * maxWidth) / w;
+          w = maxWidth;
+        } else if (h > maxWidth) {
+          w = (w * maxWidth) / h;
+          h = maxWidth;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        ctx?.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = src;
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    await Promise.all(
+      Array.from(files).map(async (file) => {
+        if (!file.type.startsWith("image/")) return;
+        return new Promise<void>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            const originalSrc = event.target?.result as string;
+            const compressedSrc = await compressImage(originalSrc, 300, 0.7);
+            const originalSize = originalSrc.length;
+            const compressedSize = compressedSrc.length;
+            console.log(
+              `图片压缩: ${file.name} ${(originalSize / 1024).toFixed(1)}KB → ${(compressedSize / 1024).toFixed(1)}KB (${((1 - compressedSize / originalSize) * 100).toFixed(0)}%减小)`,
+            );
+            const img = new Image();
+            img.onload = () => {
+              addImage({
+                src: compressedSrc,
+                name: file.name.replace(/\.[^/.]+$/, ""),
+                category: "未分类",
+                width: img.width,
+                height: img.height,
+              });
+              resolve();
+            };
+            img.src = compressedSrc;
+          };
+          reader.readAsDataURL(file);
+        });
+      }),
+    );
+    e.target.value = "";
+  };
+
+  // 排序切换
+  const handleSortChange = (field: SortField) => {
+    setPage(1);
+    setSelectedImages(new Set());
+
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  // 排序后的图片
+  const sortedImages = useMemo(() => {
+    if (images.length === 0) return [];
+
+    const sorted = [...images];
+
+    try {
+      sorted.sort((a, b) => {
+        let comparison = 0;
+
+        if (sortField === "name") {
+          const nameA = (a.name || "").toString();
+          const nameB = (b.name || "").toString();
+          comparison = nameA.localeCompare(nameB, "zh-CN");
+        } else if (sortField === "createdAt") {
+          const timeA = a.createdAt || 0;
+          const timeB = b.createdAt || 0;
+          comparison = timeA - timeB;
+        }
+
+        return sortOrder === "asc" ? comparison : -comparison;
+      });
+    } catch (err) {
+      console.error("排序出错:", err);
+      return images;
+    }
+
+    return sorted;
+  }, [images, sortField, sortOrder]);
+
+  // 搜索过滤
+  const filteredImages = useMemo(() => {
+    if (!searchTerm.trim()) return sortedImages;
+
+    const term = searchTerm.toLowerCase();
+    return sortedImages.filter((img) =>
+      (img.name || "").toLowerCase().includes(term),
+    );
+  }, [sortedImages, searchTerm]);
+
+  // 分页
+  const paginatedImages = useMemo(() => {
+    return filteredImages.slice(0, page * ITEMS_PER_PAGE);
+  }, [filteredImages, page]);
+
+  const hasMore = paginatedImages.length < filteredImages.length;
+  const totalCount = filteredImages.length;
+
+  // 批量选择
+  const toggleSelect = (id: string) => {
+    setSelectedImages((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedImages(new Set(paginatedImages.map((img) => img.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedImages(new Set());
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedImages.size === 0) return;
+    if (!confirm(`确定删除选中的 ${selectedImages.size} 张图片吗？`)) return;
+    selectedImages.forEach((id) => removeImage(id));
+    setSelectedImages(new Set());
+    setIsBatchMode(false);
+  };
+
+  const handleImageClick = (imageId: string) => {
+    if (isBatchMode) {
+      toggleSelect(imageId);
+    } else {
+      addCardToScene(imageId);
+    }
+  };
+
+  // 拖拽调整宽度
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = e.clientX;
+      setWidth(Math.max(80, newWidth));
+    };
+    const handleMouseUp = () => setIsResizing(false);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
+
+  return (
+    <div
+      className="bg-white border-r border-gray-300 shadow-lg flex flex-col relative h-full select-none"
+      style={{
+        width: isExpanded ? `${width}px` : "40px",
+        minWidth: isExpanded ? "80px" : "40px",
+      }}
+    >
+      {/* 拖拽调整条 */}
+      {isExpanded && (
+        <div
+          ref={resizeRef}
+          onMouseDown={handleMouseDown}
+          style={{
+            width: "12px",
+            background: isResizing ? "rgba(76,175,80,0.3)" : "transparent",
+            cursor: "ew-resize",
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            right: "-6px",
+            zIndex: 100,
+          }}
+          title="左右拖拽调整宽度"
+        />
+      )}
+
+      {/* 图库头部 */}
+      <div className="flex items-center justify-between px-2 py-2 bg-gray-50">
+        <div
+          className="flex items-center gap-1 cursor-pointer hover:bg-gray-100 rounded px-1 py-1"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <span className="text-lg">🖼️</span>
+          {isExpanded && (
+            <span className="font-medium text-gray-700 text-sm">
+              {totalCount}
+            </span>
+          )}
+          <span className="text-gray-400 text-xs">
+            {isExpanded ? "◀" : "▶"}
+          </span>
+        </div>
+      </div>
+
+      {/* 图库内容 */}
+      {isExpanded && (
+        <div className="flex-1 overflow-y-auto p-2">
+          {/* 搜索框 */}
+          <div className="mb-2">
+            <input
+              type="text"
+              placeholder="搜索..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+                setSelectedImages(new Set());
+              }}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#4CAF50]"
+            />
+          </div>
+
+          {/* 排序按钮 */}
+          <div className="flex items-center gap-1 mb-2">
+            <button
+              onClick={() => handleSortChange("name")}
+              className={`px-2 py-1 rounded text-xs transition-colors ${
+                sortField === "name"
+                  ? "bg-[#4CAF50] text-white"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              名称{sortField === "name" && (sortOrder === "asc" ? " ▲" : " ▼")}
+            </button>
+            <button
+              onClick={() => handleSortChange("createdAt")}
+              className={`px-2 py-1 rounded text-xs transition-colors ${
+                sortField === "createdAt"
+                  ? "bg-[#4CAF50] text-white"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              时间
+              {sortField === "createdAt" && (sortOrder === "asc" ? " ▲" : " ▼")}
+            </button>
+          </div>
+
+          {/* 批量操作栏 */}
+          <div className="flex items-center gap-1 mb-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 bg-[#4CAF50] text-white py-1 rounded text-xs hover:bg-green-600"
+            >
+              + 添加
+            </button>
+            <button
+              onClick={() => {
+                setIsBatchMode(!isBatchMode);
+                setSelectedImages(new Set());
+              }}
+              className={`px-2 py-1 rounded text-xs transition-colors ${
+                isBatchMode
+                  ? "bg-orange-500 text-white"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              {isBatchMode ? "完成" : "多选"}
+            </button>
+          </div>
+
+          {/* 批量模式操作按钮 */}
+          {isBatchMode && (
+            <div className="flex items-center gap-1 mb-2">
+              <button
+                onClick={selectAll}
+                className="flex-1 bg-blue-500 text-white py-1 rounded text-xs hover:bg-blue-600"
+              >
+                全选
+              </button>
+              <button
+                onClick={deselectAll}
+                className="flex-1 bg-gray-500 text-white py-1 rounded text-xs hover:bg-gray-600"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleBatchDelete}
+                disabled={selectedImages.size === 0}
+                className="flex-1 bg-red-500 text-white py-1 rounded text-xs hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                删除({selectedImages.size})
+              </button>
+            </div>
+          )}
+
+          {/* 图片列表 */}
+          {totalCount === 0 ? (
+            <div className="text-center text-gray-400 py-4">
+              <p className="text-xs">{searchTerm ? "无结果" : "暂无图片"}</p>
+            </div>
+          ) : (
+            <div>
+              <div className="flex flex-wrap gap-2">
+                {paginatedImages.map((image) => (
+                  <div
+                    key={image.id}
+                    className={`group relative cursor-pointer hover:scale-105 transition-transform ${
+                      selectedImages.has(image.id)
+                        ? "ring-2 ring-red-500 rounded-lg"
+                        : ""
+                    }`}
+                    onClick={() => handleImageClick(image.id)}
+                  >
+                    <div
+                      className={`bg-gray-100 rounded-lg overflow-hidden border-2 shadow-sm ${
+                        selectedImages.has(image.id)
+                          ? "border-red-500"
+                          : "border-gray-200 hover:border-[#4CAF50]"
+                      }`}
+                      style={{ width: "64px", height: "64px" }}
+                    >
+                      {image.src ? (
+                        <img
+                          src={image.src}
+                          alt={image.name}
+                          className="w-full h-full object-cover pointer-events-none"
+                          draggable={false}
+                          onError={(e) => {
+                            console.error(
+                              "图片加载失败:",
+                              image.id,
+                              image.name,
+                            );
+                            (e.target as HTMLImageElement).style.display =
+                              "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                          {image.name?.charAt(0) || "?"}
+                        </div>
+                      )}
+                    </div>
+                    {isBatchMode && (
+                      <div
+                        className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-xs ${
+                          selectedImages.has(image.id)
+                            ? "bg-red-500 text-white"
+                            : "bg-gray-300 text-gray-500"
+                        }`}
+                      >
+                        {selectedImages.has(image.id) ? "✓" : ""}
+                      </div>
+                    )}
+                    {!isBatchMode && (
+                      <button
+                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`删除"${image.name}"?`)) {
+                            removeImage(image.id);
+                          }
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {hasMore && (
+                <div className="flex justify-center mt-2">
+                  <button
+                    onClick={() => setPage(page + 1)}
+                    className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                  >
+                    更多({filteredImages.length - paginatedImages.length})
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleFileUpload}
+      />
+    </div>
+  );
+};
+
+export default ImageLibrary;
