@@ -1,5 +1,6 @@
-const TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
-const REPO = import.meta.env.VITE_GITHUB_REPO;
+const TOKEN =
+  import.meta.env.VITE_GITHUB_TOKEN || process.env.VITE_GITHUB_TOKEN;
+const REPO = import.meta.env.VITE_GITHUB_REPO || "Tian-anna/literacy-cards";
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
