@@ -22,6 +22,10 @@ const ImageLibrary: React.FC = () => {
     addCardToScene,
     cleanInvalidImages,
     cleanDuplicateImages,
+    categories,
+    addCategory,
+    removeCategory,
+    updateImageCategory,
   } = useStore();
   const [isExpanded, setIsExpanded] = useState(true);
   const [width, setWidth] = useState(200);
@@ -40,6 +44,50 @@ const ImageLibrary: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // ========== 分类相关状态 ==========
+  const [activeCategory, setActiveCategory] = useState<string>("全部");
+  const [isManagingCategories, setIsManagingCategories] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [editingImageId, setEditingImageId] = useState<string | null>(null);
+  // =================================
+
+  // ========== GitHub 图片数量 ==========
+  const [githubCount, setGithubCount] = useState<number | null>(null);
+  const [isLoadingGithubCount, setIsLoadingGithubCount] = useState(false);
+
+  const fetchGithubCount = useCallback(async () => {
+    setIsLoadingGithubCount(true);
+    try {
+      const res = await fetch(
+        "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
+      );
+      if (!res.ok) throw new Error("获取失败");
+
+      const files = await res.json();
+      const imageFiles = files.filter(
+        (file: any) => file.name !== ".gitkeep" && file.type === "file",
+      );
+      setGithubCount(imageFiles.length);
+    } catch (error) {
+      console.error("获取 GitHub 图片数量失败:", error);
+      setGithubCount(null);
+    } finally {
+      setIsLoadingGithubCount(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchGithubCount();
+  }, [fetchGithubCount]);
+
+  useEffect(() => {
+    if (!isSyncing && githubCount !== null) {
+      fetchGithubCount();
+    }
+  }, [isSyncing, fetchGithubCount]);
+  // =====================================
+
   const ITEMS_PER_PAGE = 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<HTMLDivElement>(null);
@@ -90,7 +138,6 @@ const ImageLibrary: React.FC = () => {
     const files = e.target.files;
     if (!files) return;
 
-    // 过滤出图片文件
     const imageFiles = Array.from(files).filter((file) =>
       file.type.startsWith("image/"),
     );
@@ -107,7 +154,6 @@ const ImageLibrary: React.FC = () => {
     let skipCount = 0;
     let failCount = 0;
 
-    // 先获取 GitHub 上的文件列表（避免重复请求）
     let githubFiles: any[] = [];
     try {
       const res = await fetch(
@@ -120,18 +166,15 @@ const ImageLibrary: React.FC = () => {
       console.error("获取 GitHub 文件列表失败:", error);
     }
 
-    // 完全串行上传：一张一张传
     for (let i = 0; i < imageFiles.length; i++) {
       const file = imageFiles[i];
       const fileName = file.name.replace(/\.[^/.]+$/, "");
 
-      // 更新进度
       setUploadProgress({
         current: i + 1,
         total: imageFiles.length,
       });
 
-      // 检查 1：本地是否已存在
       const existsLocal = images.some((img) => img.name === fileName);
       if (existsLocal) {
         console.log("本地已存在，跳过:", fileName);
@@ -139,7 +182,6 @@ const ImageLibrary: React.FC = () => {
         continue;
       }
 
-      // 检查 2：GitHub 是否已有同名文件
       const existsGitHub = githubFiles.some(
         (f: any) => f.name.includes(`_${fileName}.`) || f.name === file.name,
       );
@@ -149,11 +191,9 @@ const ImageLibrary: React.FC = () => {
         continue;
       }
 
-      // 上传
       try {
         const imageUrl = await uploadImageToGitHub(file);
 
-        // 获取图片尺寸
         const img = new Image();
         img.crossOrigin = "anonymous";
 
@@ -167,11 +207,10 @@ const ImageLibrary: React.FC = () => {
           img.src = imageUrl;
         });
 
-        // 保存到 store
         addImage({
           src: imageUrl,
           name: fileName,
-          category: "未分类",
+          category: activeCategory === "全部" ? "未分类" : activeCategory,
           width: img.width,
           height: img.height,
         });
@@ -179,14 +218,12 @@ const ImageLibrary: React.FC = () => {
         console.log("上传成功:", fileName);
         successCount++;
 
-        // 添加到 githubFiles，避免同一批内重复上传同名文件
         githubFiles.push({ name: `${Date.now()}_${file.name}` });
       } catch (error) {
         console.error("上传失败:", fileName, error);
         failCount++;
       }
 
-      // 每张图片之间添加延迟，避免触发速率限制
       if (i < imageFiles.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, 800));
       }
@@ -196,7 +233,8 @@ const ImageLibrary: React.FC = () => {
     setUploadProgress({ current: 0, total: 0 });
     e.target.value = "";
 
-    // 显示上传结果
+    fetchGithubCount();
+
     const messages: string[] = [];
     if (successCount > 0) messages.push(`成功 ${successCount} 张`);
     if (skipCount > 0) messages.push(`跳过 ${skipCount} 张（已存在）`);
@@ -216,12 +254,8 @@ const ImageLibrary: React.FC = () => {
 
     setIsCleaning(true);
     try {
-      // 1. 清理本地重复图片（只删 IndexedDB，不删 GitHub）
       cleanDuplicateImages();
-
-      // 2. 清理无效 URL（只删 IndexedDB，不删 GitHub）
       await cleanInvalidImages();
-
       alert("清理完成！仅移除了本地重复/无效记录，GitHub 文件不受影响。");
     } catch (error) {
       console.error("清理失败:", error);
@@ -230,6 +264,31 @@ const ImageLibrary: React.FC = () => {
       setIsCleaning(false);
     }
   };
+
+  // ========== 分类管理 ==========
+  const handleAddCategory = () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    if (categories.includes(name)) {
+      alert("分类已存在");
+      return;
+    }
+    addCategory(name);
+    setNewCategoryName("");
+  };
+
+  const handleRemoveCategory = (category: string) => {
+    if (!confirm(`删除分类"${category}"？该分类下的图片将变为"未分类"。`))
+      return;
+    removeCategory(category);
+    if (activeCategory === category) setActiveCategory("全部");
+  };
+
+  const handleChangeImageCategory = (imageId: string, category: string) => {
+    updateImageCategory(imageId, category);
+    setEditingImageId(null);
+  };
+  // =============================
 
   // 排序切换
   const handleSortChange = (field: SortField) => {
@@ -284,13 +343,20 @@ const ImageLibrary: React.FC = () => {
     );
   }, [sortedImages, searchTerm]);
 
+  // ========== 按分类过滤 ==========
+  const categoryFilteredImages = useMemo(() => {
+    if (activeCategory === "全部") return filteredImages;
+    return filteredImages.filter((img) => img.category === activeCategory);
+  }, [filteredImages, activeCategory]);
+  // =============================
+
   // 分页
   const paginatedImages = useMemo(() => {
-    return filteredImages.slice(0, page * ITEMS_PER_PAGE);
-  }, [filteredImages, page]);
+    return categoryFilteredImages.slice(0, page * ITEMS_PER_PAGE);
+  }, [categoryFilteredImages, page]);
 
-  const hasMore = paginatedImages.length < filteredImages.length;
-  const totalCount = filteredImages.length;
+  const hasMore = paginatedImages.length < categoryFilteredImages.length;
+  const totalCount = categoryFilteredImages.length;
 
   // 批量选择
   const toggleSelect = (id: string) => {
@@ -343,7 +409,6 @@ const ImageLibrary: React.FC = () => {
     [startResizing],
   );
 
-  // 触摸开始
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
       e.stopPropagation();
@@ -362,7 +427,7 @@ const ImageLibrary: React.FC = () => {
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault(); // 阻止默认滚动行为
+      e.preventDefault();
       const touch = e.touches[0];
       const newWidth = touch.clientX;
       setWidth(Math.max(80, newWidth));
@@ -383,6 +448,16 @@ const ImageLibrary: React.FC = () => {
       document.removeEventListener("touchend", handleTouchEnd);
     };
   }, [isResizing]);
+
+  // 统计各分类数量
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    categories.forEach((cat) => {
+      counts[cat] = images.filter((img) => img.category === cat).length;
+    });
+    counts["全部"] = images.length;
+    return counts;
+  }, [images, categories]);
 
   return (
     <div
@@ -407,7 +482,7 @@ const ImageLibrary: React.FC = () => {
             bottom: 0,
             right: "-12px",
             zIndex: 100,
-            touchAction: "none", // 关键：禁止浏览器默认触摸行为
+            touchAction: "none",
           }}
           title="左右拖拽调整宽度"
         />
@@ -434,6 +509,109 @@ const ImageLibrary: React.FC = () => {
       {/* 图库内容 */}
       {isExpanded && (
         <div className="flex-1 overflow-y-auto p-2">
+          {/* GitHub 图片数量 */}
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-xs text-gray-500">
+              GitHub:
+              {isLoadingGithubCount ? (
+                <span className="inline-block w-3 h-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin ml-1" />
+              ) : githubCount !== null ? (
+                <span className="font-medium text-blue-600 ml-1">
+                  {githubCount} 张
+                </span>
+              ) : (
+                <span className="text-red-400 ml-1">获取失败</span>
+              )}
+            </span>
+            <button
+              onClick={fetchGithubCount}
+              disabled={isLoadingGithubCount}
+              className="text-xs text-blue-500 hover:text-blue-700 disabled:text-gray-400"
+              title="刷新数量"
+            >
+              🔄
+            </button>
+          </div>
+
+          {/* ========== 分类筛选栏 ========== */}
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-500 font-medium">
+                分类筛选
+              </span>
+              <button
+                onClick={() => setIsManagingCategories(!isManagingCategories)}
+                className="text-xs text-blue-500 hover:text-blue-700"
+              >
+                {isManagingCategories ? "完成" : "管理"}
+              </button>
+            </div>
+
+            {/* 分类标签 */}
+            <div className="flex flex-wrap gap-1">
+              {["全部", ...categories].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => {
+                    setActiveCategory(cat);
+                    setPage(1);
+                  }}
+                  className={`px-2 py-0.5 rounded-full text-xs transition-colors ${
+                    activeCategory === cat
+                      ? "bg-[#4CAF50] text-white"
+                      : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                  }`}
+                >
+                  {cat}
+                  <span className="ml-0.5 opacity-70">
+                    {categoryCounts[cat] || 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* 分类管理面板 */}
+            {isManagingCategories && (
+              <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+                <div className="flex items-center gap-1 mb-2">
+                  <input
+                    type="text"
+                    placeholder="新分类名称"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#4CAF50]"
+                  />
+                  <button
+                    onClick={handleAddCategory}
+                    className="px-2 py-1 bg-[#4CAF50] text-white rounded text-xs hover:bg-green-600"
+                  >
+                    添加
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {categories
+                    .filter((c) => c !== "未分类")
+                    .map((cat) => (
+                      <span
+                        key={cat}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded-full text-xs text-gray-600"
+                      >
+                        {cat}
+                        <button
+                          onClick={() => handleRemoveCategory(cat)}
+                          className="text-red-400 hover:text-red-600 font-bold"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* ============================== */}
+
           {/* 同步按钮 */}
           <div className="flex items-center gap-1 mb-2">
             <button
@@ -617,6 +795,21 @@ const ImageLibrary: React.FC = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* ========== 分类标签显示 ========== */}
+                    <div className="absolute -bottom-1 left-0 right-0 flex justify-center">
+                      <span
+                        className="px-1 py-0 rounded text-[9px] bg-gray-700 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingImageId(image.id);
+                        }}
+                      >
+                        {image.category}
+                      </span>
+                    </div>
+                    {/* ================================= */}
+
                     {isBatchMode && (
                       <div
                         className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-xs ${
@@ -641,6 +834,31 @@ const ImageLibrary: React.FC = () => {
                         ×
                       </button>
                     )}
+
+                    {/* ========== 修改分类下拉框 ========== */}
+                    {editingImageId === image.id && (
+                      <div
+                        className="absolute top-6 left-0 z-50 bg-white border border-gray-300 rounded shadow-lg p-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <select
+                          value={image.category}
+                          onChange={(e) =>
+                            handleChangeImageCategory(image.id, e.target.value)
+                          }
+                          className="text-xs border border-gray-300 rounded px-1 py-0.5"
+                          autoFocus
+                          onBlur={() => setEditingImageId(null)}
+                        >
+                          {categories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {/* =================================== */}
                   </div>
                 ))}
               </div>
@@ -651,7 +869,8 @@ const ImageLibrary: React.FC = () => {
                     onClick={() => setPage(page + 1)}
                     className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
                   >
-                    更多({filteredImages.length - paginatedImages.length})
+                    更多(
+                    {categoryFilteredImages.length - paginatedImages.length})
                   </button>
                 </div>
               )}

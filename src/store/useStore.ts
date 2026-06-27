@@ -54,6 +54,13 @@ interface StoreState {
   exportScene: () => string;
   importScene: (json: string) => void;
 
+  // ========== 分类功能 ==========
+  categories: string[];
+  addCategory: (category: string) => void;
+  removeCategory: (category: string) => void;
+  updateImageCategory: (id: string, category: string) => void;
+  // ============================
+
   // 清理功能（只清理本地 IndexedDB，绝不删除 GitHub）
   cleanInvalidImages: () => Promise<void>;
   cleanDuplicateImages: () => void;
@@ -84,9 +91,33 @@ export const useStore = create<StoreState>()(
         get().saveHistory();
       },
 
+      // ========== 分类功能 ==========
+      categories: ["中文", "英文", "未分类"],
+
+      addCategory: (category) =>
+        set((state) => {
+          if (state.categories.includes(category)) return state;
+          return { categories: [...state.categories, category] };
+        }),
+
+      removeCategory: (category) =>
+        set((state) => ({
+          categories: state.categories.filter((c) => c !== category),
+          images: state.images.map((img) =>
+            img.category === category ? { ...img, category: "未分类" } : img,
+          ),
+        })),
+
+      updateImageCategory: (id, category) =>
+        set((state) => ({
+          images: state.images.map((img) =>
+            img.id === id ? { ...img, category } : img,
+          ),
+        })),
+      // ============================
+
       addImage: (image) => {
         set((state) => {
-          // 检查是否已存在（通过 src 或 name 判断）
           const exists = state.images.some(
             (img) => img.src === image.src || img.name === image.name,
           );
@@ -102,6 +133,7 @@ export const useStore = create<StoreState>()(
                 ...image,
                 id: crypto.randomUUID(),
                 createdAt: Date.now(),
+                category: image.category || "未分类",
               },
             ],
           };
@@ -326,10 +358,21 @@ export const useStore = create<StoreState>()(
         const validImages: CardImage[] = [];
         let invalidCount = 0;
 
+        function checkImageUrl(url: string): Promise<boolean> {
+          return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            img.src = url;
+            setTimeout(() => resolve(false), 5000);
+          });
+        }
+
         for (const image of state.images) {
           try {
-            const res = await fetch(image.src, { method: "HEAD" });
-            if (res.ok) {
+            const isValid = await checkImageUrl(image.src);
+            if (isValid) {
               validImages.push(image);
             } else {
               invalidCount++;
@@ -401,6 +444,7 @@ export const useStore = create<StoreState>()(
         showGrid: state.showGrid,
         gridSize: state.gridSize,
         snapToGrid: state.snapToGrid,
+        categories: state.categories,
       }),
     },
   ),
