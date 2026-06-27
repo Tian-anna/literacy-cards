@@ -80,13 +80,27 @@ export const useStore = create<StoreState>()(
         get().saveHistory();
       },
 
-      addImage: (image) =>
-        set((state) => ({
-          images: [
-            ...state.images,
-            { ...image, id: uuidv4(), createdAt: Date.now() },
-          ],
-        })),
+      addImage: (image) => {
+        set((state) => {
+          // 检查是否已存在（通过 src 判断）
+          const exists = state.images.some((img) => img.src === image.src);
+          if (exists) {
+            console.log("图片已存在，跳过:", image.name);
+            return state;
+          }
+
+          return {
+            images: [
+              ...state.images,
+              {
+                ...image,
+                id: crypto.randomUUID(),
+                createdAt: Date.now(),
+              },
+            ],
+          };
+        });
+      },
 
       removeImage: (id) =>
         set((state) => ({
