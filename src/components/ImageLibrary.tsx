@@ -23,9 +23,55 @@ const ImageLibrary: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const ITEMS_PER_PAGE = 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<HTMLDivElement>(null);
+
+  // 启动时从 GitHub 加载已有图片
+  useEffect(() => {
+    async function loadImagesFromGitHub() {
+      // 如果本地已有图片，不重复加载
+      if (images.length > 0) return;
+
+      setIsLoading(true);
+      try {
+        const res = await fetch(
+          "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
+        );
+        if (!res.ok) throw new Error("加载失败");
+
+        const files = await res.json();
+
+        // 过滤掉 .gitkeep，添加图片到 store
+        const imageFiles = files.filter(
+          (file: any) => file.name !== ".gitkeep",
+        );
+
+        for (const file of imageFiles) {
+          // 检查是否已存在
+          const exists = images.some(
+            (img: any) => img.src === file.download_url,
+          );
+          if (!exists) {
+            addImage({
+              src: file.download_url,
+              name: file.name.replace(/\.[^/.]+$/, ""),
+              category: "未分类",
+              width: 300,
+              height: 300,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("从 GitHub 加载图片失败:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadImagesFromGitHub();
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -244,6 +290,13 @@ const ImageLibrary: React.FC = () => {
       {/* 图库内容 */}
       {isExpanded && (
         <div className="flex-1 overflow-y-auto p-2">
+          {/* 加载提示 */}
+          {isLoading && (
+            <div className="text-center text-gray-400 py-4">
+              <p className="text-xs">正在加载图片...</p>
+            </div>
+          )}
+
           {/* 搜索框 */}
           <div className="mb-2">
             <input
