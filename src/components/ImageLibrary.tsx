@@ -14,14 +14,14 @@ interface ImageLibraryProps {
   width?: number;
 }
 
-const ITEMS_PER_PAGE = 20;
-const MIN_WIDTH = 180;
-const MAX_WIDTH = 400;
+const ITEMS_PER_PAGE = 30;
+const MIN_WIDTH = 160;
+const MAX_WIDTH = 500;
 
 const ImageLibrary: React.FC<ImageLibraryProps> = ({
   onAddToCanvas,
   onWidthChange,
-  width = 240,
+  width = 200,
 }) => {
   const {
     images,
@@ -37,6 +37,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [selectedCategory, setSelectedCategory] = useState("全部");
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<"name" | "date">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [isSyncing, setIsSyncing] = useState(false);
   const [githubCount, setGithubCount] = useState<number | null>(null);
   const [isLoadingGithubCount, setIsLoadingGithubCount] = useState(false);
@@ -121,13 +122,19 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
 
     if (sortBy === "name") {
-      result.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+      result.sort((a, b) => {
+        const cmp = a.name.localeCompare(b.name, "zh-CN");
+        return sortOrder === "asc" ? cmp : -cmp;
+      });
     } else {
-      result.sort((a, b) => (b.id > a.id ? 1 : -1));
+      result.sort((a, b) => {
+        const cmp = b.createdAt - a.createdAt;
+        return sortOrder === "asc" ? -cmp : cmp;
+      });
     }
 
     return result;
-  }, [images, selectedCategory, searchTerm, sortBy]);
+  }, [images, selectedCategory, searchTerm, sortBy, sortOrder]);
 
   const totalCount = filteredImages.length;
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
@@ -136,6 +143,16 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     page * ITEMS_PER_PAGE,
   );
   const hasMore = page < totalPages;
+
+  const handleSort = (type: "name" | "date") => {
+    if (sortBy === type) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(type);
+      setSortOrder("asc");
+    }
+    setPage(1);
+  };
 
   const handleSyncFromGitHub = async () => {
     if (images.length > 0) {
@@ -201,9 +218,17 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         return next;
       });
     } else {
-      console.log("点击图片:", imageId);
       onAddToCanvas?.(imageId);
     }
+  };
+
+  const handleSelectAll = () => {
+    const allIds = new Set(filteredImages.map((img) => img.id));
+    setSelectedImages(allIds);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedImages(new Set());
   };
 
   const handleAddCategory = () => {
@@ -218,7 +243,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       updateImageCategory(id, category);
     });
     setSelectedImages(new Set());
-    setIsBatchMode(false);
   };
 
   const handleBatchDelete = () => {
@@ -247,22 +271,20 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     <div
       ref={containerRef}
       className="h-full flex flex-col bg-white border-r border-gray-200 relative"
-      style={{ width, minWidth: width, maxWidth: width }}
+      style={{ width, minWidth: width, maxWidth: width, flexShrink: 0 }}
     >
       {/* 拖拽调整宽度的手柄 */}
       <div
-        className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-50 flex items-center justify-center"
+        className="absolute right-0 top-0 bottom-0 w-4 cursor-col-resize z-50 flex items-center justify-center group"
         onMouseDown={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           setIsResizing(true);
         }}
-        style={{
-          touchAction: "none",
-          background: isResizing ? "rgba(59, 130, 246, 0.3)" : "transparent",
-        }}
+        style={{ touchAction: "none" }}
       >
         <div
-          className="w-1 h-8 rounded-full"
+          className="w-1 h-12 rounded-full transition-colors"
           style={{
             background: isResizing ? "#3b82f6" : "#d1d5db",
           }}
@@ -314,7 +336,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     setSelectedCategory(cat);
                     setPage(1);
                   }}
-                  className={`px-2 py-0.5 rounded text-xs ${
+                  className={`px-2 py-0.5 rounded text-xs transition-colors ${
                     selectedCategory === cat
                       ? "bg-green-500 text-white"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -401,24 +423,26 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
 
           <div className="flex-shrink-0 px-3 py-1 border-b border-gray-100 flex gap-2">
             <button
-              onClick={() => setSortBy("name")}
-              className={`text-xs px-2 py-0.5 rounded ${
+              onClick={() => handleSort("name")}
+              className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
                 sortBy === "name"
                   ? "bg-green-500 text-white"
                   : "bg-gray-100 text-gray-600"
               }`}
             >
-              按名称
+              名称
+              {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
             </button>
             <button
-              onClick={() => setSortBy("date")}
-              className={`text-xs px-2 py-0.5 rounded ${
+              onClick={() => handleSort("date")}
+              className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
                 sortBy === "date"
                   ? "bg-green-500 text-white"
                   : "bg-gray-100 text-gray-600"
               }`}
             >
-              按日期
+              日期
+              {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
             </button>
           </div>
 
@@ -446,20 +470,34 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
           </div>
 
           {isBatchMode && (
-            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1">
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1.5">
               <div className="flex items-center gap-1">
                 <span className="text-xs text-gray-500">
                   已选 {selectedImages.size} 张
                 </span>
-                <button
-                  onClick={handleBatchDelete}
-                  disabled={selectedImages.size === 0}
-                  className="ml-auto px-2 py-0.5 bg-red-500 text-white rounded text-xs disabled:opacity-50 hover:bg-red-600"
-                >
-                  删除
-                </button>
+                <div className="ml-auto flex gap-1">
+                  <button
+                    onClick={handleSelectAll}
+                    className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs hover:bg-blue-200"
+                  >
+                    全选
+                  </button>
+                  <button
+                    onClick={handleDeselectAll}
+                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleBatchDelete}
+                    disabled={selectedImages.size === 0}
+                    className="px-2 py-0.5 bg-red-500 text-white rounded text-xs disabled:opacity-50 hover:bg-red-600"
+                  >
+                    删除
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-wrap">
                 <span className="text-xs text-gray-500">移到:</span>
                 {categories.map((cat) => (
                   <button
@@ -489,11 +527,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-1.5">
                   {paginatedImages.map((image) => (
                     <div
                       key={image.id}
-                      className={`relative aspect-square rounded-lg overflow-hidden border-2 cursor-pointer transition-all hover:shadow-md ${
+                      className={`relative aspect-square rounded-md overflow-hidden border-2 cursor-pointer transition-all hover:shadow-md ${
                         isBatchMode && selectedImages.has(image.id)
                           ? "border-green-500 ring-2 ring-green-300"
                           : "border-gray-200 hover:border-green-300"
@@ -530,12 +568,14 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                         )}
                       </div>
 
-                      {isBatchMode && (
-                        <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-green-500 text-white text-xs flex items-center justify-center">
-                          {selectedImages.has(image.id) ? "✓" : ""}
+                      {/* 批量选择标记 */}
+                      {isBatchMode && selectedImages.has(image.id) && (
+                        <div className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center font-bold">
+                          ✓
                         </div>
                       )}
 
+                      {/* 删除按钮 */}
                       {!isBatchMode && (
                         <button
                           onClick={(e) => {
@@ -544,13 +584,13 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                               removeImage(image.id);
                             }
                           }}
-                          className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
+                          className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
                         >
                           ×
                         </button>
                       )}
 
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate">
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] px-1 py-0.5 truncate">
                         {image.name}
                       </div>
                     </div>

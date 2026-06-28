@@ -4,9 +4,13 @@ import { PlacedCard } from "@/types";
 
 interface DraggableCardProps {
   card: PlacedCard;
+  canvasScale?: number;
 }
 
-const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
+const DraggableCard: React.FC<DraggableCardProps> = ({
+  card,
+  canvasScale = 1,
+}) => {
   const {
     images,
     selectedIds,
@@ -93,8 +97,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const dx = e.clientX - dragStartRef.current.x;
-      const dy = e.clientY - dragStartRef.current.y;
+      const dx = (e.clientX - dragStartRef.current.x) / canvasScale;
+      const dy = (e.clientY - dragStartRef.current.y) / canvasScale;
 
       initialPositionsRef.current.forEach((pos, id) => {
         let newX = pos.x + dx;
@@ -122,7 +126,14 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, snapToGrid, gridSize, updateCard, setIsDragging]);
+  }, [
+    isDragging,
+    snapToGrid,
+    gridSize,
+    updateCard,
+    setIsDragging,
+    canvasScale,
+  ]);
 
   useEffect(() => {
     const el = cardRef.current;
@@ -165,8 +176,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       e.stopPropagation();
 
       const touch = e.touches[0];
-      const dx = touch.clientX - dragStartRef.current.x;
-      const dy = touch.clientY - dragStartRef.current.y;
+      const dx = (touch.clientX - dragStartRef.current.x) / canvasScale;
+      const dy = (touch.clientY - dragStartRef.current.y) / canvasScale;
 
       if (
         !isTouchDraggingRef.current &&
@@ -249,6 +260,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     snapToGrid,
     gridSize,
     setIsDragging,
+    canvasScale,
   ]);
 
   return (

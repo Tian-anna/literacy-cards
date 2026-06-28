@@ -5,7 +5,7 @@ import Canvas from "@/components/Canvas";
 import { useStore } from "@/store/useStore";
 
 const App: React.FC = () => {
-  const [sidebarWidth, setSidebarWidth] = useState(240);
+  const [sidebarWidth, setSidebarWidth] = useState(200);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -43,9 +43,7 @@ const App: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // 点击图片添加到画布
   const handleAddToCanvas = (imageId: string) => {
-    console.log("添加图片到画布:", imageId);
     useStore.getState().addCardToScene(imageId);
   };
 

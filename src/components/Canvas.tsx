@@ -40,8 +40,12 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
   const [isBoxSelecting, setIsBoxSelecting] = useState(false);
+  const [canvasScale, setCanvasScale] = useState(1);
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
   const isTouchBoxSelectingRef = useRef(false);
   const touchBoxStartRef = useRef({ x: 0, y: 0 });
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0 });
 
   const presetColors = [
     "#e8e8e8",
@@ -58,15 +62,18 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     "#0d3b66",
   ];
 
-  const getCanvasPoint = useCallback((clientX: number, clientY: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    };
-  }, []);
+  const getCanvasPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return { x: 0, y: 0 };
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (clientX - rect.left - canvasOffset.x) / canvasScale,
+        y: (clientY - rect.top - canvasOffset.y) / canvasScale,
+      };
+    },
+    [canvasScale, canvasOffset],
+  );
 
   const getCardsInBox = useCallback(
     (box: { left: number; top: number; right: number; bottom: number }) => {
@@ -99,6 +106,16 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       const target = e.target as HTMLElement;
       if (target.closest(".placed-card")) return;
 
+      // 中键或空格+拖拽 = 平移画布
+      if (e.button === 1 || (e.button === 0 && e.altKey)) {
+        isPanningRef.current = true;
+        panStartRef.current = {
+          x: e.clientX - canvasOffset.x,
+          y: e.clientY - canvasOffset.y,
+        };
+        return;
+      }
+
       const point = getCanvasPoint(e.clientX, e.clientY);
       if (!e.ctrlKey && !e.metaKey) {
         clearSelection();
@@ -112,13 +129,30 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       });
       setIsBoxSelecting(true);
     },
-    [getCanvasPoint, clearSelection],
+    [getCanvasPoint, clearSelection, canvasOffset],
   );
 
+  // 滚轮缩放
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setCanvasScale((prev) => Math.max(0.3, Math.min(3, prev + delta)));
+    }
+  }, []);
+
   useEffect(() => {
-    if (!isBoxSelecting) return;
+    if (!isBoxSelecting && !isPanningRef.current) return;
 
     const handleMouseMove = (e: MouseEvent) => {
+      if (isPanningRef.current) {
+        setCanvasOffset({
+          x: e.clientX - panStartRef.current.x,
+          y: e.clientY - panStartRef.current.y,
+        });
+        return;
+      }
+
       const point = getCanvasPoint(e.clientX, e.clientY);
       setSelectionBox((prev) => {
         if (!prev) return null;
@@ -145,6 +179,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     const handleMouseUp = () => {
       setIsBoxSelecting(false);
       setSelectionBox(null);
+      isPanningRef.current = false;
     };
 
     document.addEventListener("mousemove", handleMouseMove);
@@ -288,6 +323,21 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       if (e.key === "Escape") {
         clearSelection();
       }
+
+      // 画布缩放快捷键
+      if ((e.ctrlKey || e.metaKey) && e.key === "+") {
+        e.preventDefault();
+        setCanvasScale((prev) => Math.min(3, prev + 0.2));
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+        e.preventDefault();
+        setCanvasScale((prev) => Math.max(0.3, prev - 0.2));
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+        e.preventDefault();
+        setCanvasScale(1);
+        setCanvasOffset({ x: 0, y: 0 });
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -319,6 +369,37 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         </div>
         <span className="text-xs text-gray-400 ml-2">{canvasColor}</span>
 
+        {/* 缩放控制 */}
+        <div className="flex items-center gap-1 ml-4">
+          <button
+            onClick={() => setCanvasScale((prev) => Math.max(0.3, prev - 0.2))}
+            className="w-6 h-6 bg-gray-100 rounded text-xs hover:bg-gray-200 flex items-center justify-center"
+            title="缩小 Ctrl+-"
+          >
+            −
+          </button>
+          <span className="text-xs text-gray-600 w-12 text-center">
+            {Math.round(canvasScale * 100)}%
+          </span>
+          <button
+            onClick={() => setCanvasScale((prev) => Math.min(3, prev + 0.2))}
+            className="w-6 h-6 bg-gray-100 rounded text-xs hover:bg-gray-200 flex items-center justify-center"
+            title="放大 Ctrl++"
+          >
+            +
+          </button>
+          <button
+            onClick={() => {
+              setCanvasScale(1);
+              setCanvasOffset({ x: 0, y: 0 });
+            }}
+            className="w-6 h-6 bg-gray-100 rounded text-xs hover:bg-gray-200 flex items-center justify-center"
+            title="重置 Ctrl+0"
+          >
+            ⌂
+          </button>
+        </div>
+
         {selectedIds.size > 0 && (
           <span className="ml-auto text-xs text-green-600 font-medium">
             已选 {selectedIds.size} 张
@@ -330,43 +411,65 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         ref={canvasRef}
         className="flex-1 relative overflow-hidden"
         onMouseDown={handleCanvasMouseDown}
+        onWheel={handleWheel}
         style={{
           backgroundColor: canvasColor,
           touchAction: "none",
           userSelect: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",
-          cursor: isBoxSelecting ? "crosshair" : "default",
+          cursor: isBoxSelecting
+            ? "crosshair"
+            : isPanningRef.current
+              ? "grabbing"
+              : "default",
         }}
       >
-        {showGrid && (
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundImage:
-                "linear-gradient(to right, #999 1px, transparent 1px), linear-gradient(to bottom, #999 1px, transparent 1px)",
-              backgroundSize: `${gridSize}px ${gridSize}px`,
-              zIndex: 0,
-              opacity: 0.3,
-            }}
-          />
-        )}
+        {/* 画布内容容器（带缩放和平移） */}
+        <div
+          style={{
+            transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${canvasScale})`,
+            transformOrigin: "0 0",
+            width: "100%",
+            height: "100%",
+            position: "absolute",
+            top: 0,
+            left: 0,
+          }}
+        >
+          {showGrid && (
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundImage:
+                  "linear-gradient(to right, #999 1px, transparent 1px), linear-gradient(to bottom, #999 1px, transparent 1px)",
+                backgroundSize: `${gridSize}px ${gridSize}px`,
+                zIndex: 0,
+                opacity: 0.3,
+              }}
+            />
+          )}
 
-        {placedCards.map((card) => (
-          <DraggableCard key={card.instanceId} card={card} />
-        ))}
+          {placedCards.map((card) => (
+            <DraggableCard
+              key={card.instanceId}
+              card={card}
+              canvasScale={canvasScale}
+            />
+          ))}
 
-        {selectionBoxStyle && (
-          <div
-            className="absolute border-2 border-blue-400 bg-blue-400 bg-opacity-20 pointer-events-none z-40"
-            style={{
-              left: selectionBoxStyle.left,
-              top: selectionBoxStyle.top,
-              width: selectionBoxStyle.width,
-              height: selectionBoxStyle.height,
-            }}
-          />
-        )}
+          {selectionBoxStyle && (
+            <div
+              className="absolute border-2 border-blue-400 bg-blue-400 bg-opacity-20 pointer-events-none z-40"
+              style={{
+                left: selectionBoxStyle.left,
+                top: selectionBoxStyle.top,
+                width: selectionBoxStyle.width,
+                height: selectionBoxStyle.height,
+              }}
+            />
+          )}
+        </div>
 
         {placedCards.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -380,6 +483,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               >
                 <p>Ctrl+点击 多选 | Shift+点击 范围选</p>
                 <p>拖拽空白处框选 | Ctrl+A 全选</p>
+                <p>Ctrl+滚轮 缩放画布 | Alt+拖拽 平移</p>
               </div>
             </div>
           </div>
