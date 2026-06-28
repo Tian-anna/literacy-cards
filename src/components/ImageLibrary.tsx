@@ -44,9 +44,10 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [isCleaning, setIsCleaning] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const resizeRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const fetchGithubCount = useCallback(async () => {
     setIsLoadingGithubCount(true);
@@ -79,6 +80,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
+      e.preventDefault();
       const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, e.clientX));
       onWidthChange?.(newWidth);
     };
@@ -90,11 +92,15 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     if (isResizing) {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
     }
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     };
   }, [isResizing, onWidthChange]);
 
@@ -154,7 +160,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
 
       let addedCount = 0;
       for (const file of imageFiles) {
-        // 使用 file.download_url（已编码，包含 %20）
         const imageUrl = file.download_url;
 
         const exists = images.some(
@@ -196,6 +201,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         return next;
       });
     } else {
+      console.log("点击图片:", imageId);
       onAddToCanvas?.(imageId);
     }
   };
@@ -223,24 +229,45 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
-  const handleCleanInvalid = () => {
-    if (confirm("确定清理所有无效图片吗？")) {
-      useStore.getState().cleanInvalidImages();
+  const handleCleanInvalid = async () => {
+    if (!confirm("确定清理所有无效图片吗？")) return;
+    setIsCleaning(true);
+    try {
+      await useStore.getState().cleanInvalidImages();
+      alert("清理完成！");
+    } catch (e) {
+      console.error("清理失败:", e);
+      alert("清理失败");
+    } finally {
+      setIsCleaning(false);
     }
   };
 
   return (
     <div
+      ref={containerRef}
       className="h-full flex flex-col bg-white border-r border-gray-200 relative"
-      style={{ width }}
+      style={{ width, minWidth: width, maxWidth: width }}
     >
       {/* 拖拽调整宽度的手柄 */}
       <div
-        ref={resizeRef}
-        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize z-50 hover:bg-blue-300"
-        onMouseDown={() => setIsResizing(true)}
-        style={{ touchAction: "none" }}
-      />
+        className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize z-50 flex items-center justify-center"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setIsResizing(true);
+        }}
+        style={{
+          touchAction: "none",
+          background: isResizing ? "rgba(59, 130, 246, 0.3)" : "transparent",
+        }}
+      >
+        <div
+          className="w-1 h-8 rounded-full"
+          style={{
+            background: isResizing ? "#3b82f6" : "#d1d5db",
+          }}
+        />
+      </div>
 
       <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
         <button
@@ -411,9 +438,10 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             </button>
             <button
               onClick={handleCleanInvalid}
-              className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200"
+              disabled={isCleaning}
+              className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200 disabled:opacity-50"
             >
-              清理无效
+              {isCleaning ? "清理中..." : "清理无效"}
             </button>
           </div>
 

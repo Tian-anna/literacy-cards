@@ -5,14 +5,11 @@ import Canvas from "@/components/Canvas";
 import { useStore } from "@/store/useStore";
 
 const App: React.FC = () => {
-  // 侧边栏宽度状态，传给 ImageLibrary 和 Canvas
   const [sidebarWidth, setSidebarWidth] = useState(240);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const store = useStore.getState();
-
-      // Delete / Backspace：删除所有选中的卡片
       if (e.key === "Delete" || e.key === "Backspace") {
         const { selectedIds, removeCard, clearSelection } = store;
         if (selectedIds.size > 0) {
@@ -20,24 +17,16 @@ const App: React.FC = () => {
           clearSelection();
         }
       }
-
-      // Ctrl/Cmd + A：全选
       if ((e.metaKey || e.ctrlKey) && e.key === "a") {
         e.preventDefault();
         store.selectAll();
       }
-
-      // Ctrl/Cmd + C：复制
       if ((e.metaKey || e.ctrlKey) && e.key === "c") {
         store.copy();
       }
-
-      // Ctrl/Cmd + V：粘贴
       if ((e.metaKey || e.ctrlKey) && e.key === "v") {
         store.paste();
       }
-
-      // Ctrl/Cmd + Z：撤销 / Ctrl+Shift+Z：重做
       if ((e.metaKey || e.ctrlKey) && e.key === "z") {
         e.preventDefault();
         if (e.shiftKey) {
@@ -46,22 +35,29 @@ const App: React.FC = () => {
           store.undo();
         }
       }
-
-      // Escape：清空选择
       if (e.key === "Escape") {
         store.clearSelection();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // 点击图片添加到画布
+  const handleAddToCanvas = (imageId: string) => {
+    console.log("添加图片到画布:", imageId);
+    useStore.getState().addCardToScene(imageId);
+  };
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#e8e8e8] overflow-hidden select-none">
       <SceneManager />
       <div className="flex-1 flex overflow-hidden">
-        <ImageLibrary width={sidebarWidth} onWidthChange={setSidebarWidth} />
+        <ImageLibrary
+          width={sidebarWidth}
+          onWidthChange={setSidebarWidth}
+          onAddToCanvas={handleAddToCanvas}
+        />
         <div className="flex-1 relative overflow-hidden">
           <Canvas sidebarWidth={sidebarWidth} />
         </div>
