@@ -14,17 +14,6 @@ import {
 type SortField = "name" | "createdAt";
 type SortOrder = "asc" | "desc";
 
-// 分类颜色映射
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  中文: { bg: "bg-red-500", text: "text-white" },
-  英文: { bg: "bg-blue-500", text: "text-white" },
-  未分类: { bg: "bg-gray-400", text: "text-white" },
-};
-
-const getCategoryStyle = (cat: string) => {
-  return CATEGORY_COLORS[cat] || { bg: "bg-purple-500", text: "text-white" };
-};
-
 const ImageLibrary: React.FC = () => {
   const {
     images,
@@ -60,7 +49,6 @@ const ImageLibrary: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<string>("全部");
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
-  const [editingImageId, setEditingImageId] = useState<string | null>(null);
   // 批量修改分类
   const [batchCategoryTarget, setBatchCategoryTarget] = useState<string>("");
 
@@ -293,11 +281,6 @@ const ImageLibrary: React.FC = () => {
       return;
     removeCategory(category);
     if (activeCategory === category) setActiveCategory("全部");
-  };
-
-  const handleChangeImageCategory = (imageId: string, category: string) => {
-    updateImageCategory(imageId, category);
-    setEditingImageId(null);
   };
 
   // 批量修改分类
@@ -800,144 +783,88 @@ const ImageLibrary: React.FC = () => {
             </div>
           ) : (
             <div>
-              <div className="flex flex-wrap gap-3">
-                {paginatedImages.map((image) => {
-                  const catStyle = getCategoryStyle(image.category);
-                  return (
+              <div className="flex flex-wrap gap-2">
+                {paginatedImages.map((image) => (
+                  <div
+                    key={image.id}
+                    className={`group relative cursor-pointer hover:scale-105 transition-transform ${
+                      selectedImages.has(image.id)
+                        ? "ring-2 ring-red-500 rounded-lg"
+                        : ""
+                    }`}
+                    onClick={() => handleImageClick(image.id)}
+                  >
                     <div
-                      key={image.id}
-                      className={`group relative cursor-pointer hover:scale-105 transition-transform ${
+                      className={`bg-gray-100 rounded-lg overflow-hidden border-2 shadow-sm ${
                         selectedImages.has(image.id)
-                          ? "ring-2 ring-red-500 rounded-lg"
-                          : ""
+                          ? "border-red-500"
+                          : "border-gray-200 hover:border-[#4CAF50]"
                       }`}
-                      onClick={() => handleImageClick(image.id)}
+                      style={{ width: "64px", height: "64px" }}
                     >
-                      <div
-                        className={`bg-gray-100 rounded-lg overflow-hidden border-2 shadow-sm ${
-                          selectedImages.has(image.id)
-                            ? "border-red-500"
-                            : "border-gray-200 hover:border-[#4CAF50]"
-                        }`}
-                        style={{ width: "64px", height: "64px" }}
-                      >
-                        {image.src ? (
-                          <img
-                            src={image.src}
-                            alt={image.name}
-                            crossOrigin="anonymous"
-                            className="w-full h-full object-cover pointer-events-none"
-                            draggable={false}
-                            onError={(e) => {
-                              console.error(
-                                "图片加载失败:",
-                                image.id,
-                                image.name,
-                              );
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = "none";
-                              const parent = target.parentElement;
-                              if (parent) {
-                                parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-xs text-gray-400">${
-                                  image.name?.charAt(0) || "?"
-                                }</div>`;
-                              }
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
-                            {image.name?.charAt(0) || "?"}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 分类标签（常驻显示，带颜色） */}
-                      <div className="absolute -bottom-2 left-0 right-0 flex justify-center z-10">
-                        <span
-                          className={`px-1.5 py-0 rounded-full text-[9px] cursor-pointer shadow-sm ${catStyle.bg} ${catStyle.text}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingImageId(image.id);
-                          }}
-                          title="点击修改分类"
-                        >
-                          {image.category}
-                        </span>
-                      </div>
-
-                      {/* 分类下拉框 */}
-                      {editingImageId === image.id && (
-                        <div
-                          className="absolute top-8 left-0 z-50 bg-white border border-gray-300 rounded shadow-lg p-1 min-w-[80px]"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="text-[10px] text-gray-400 mb-1 px-1 border-b pb-0.5">
-                            选择分类
-                          </div>
-                          {categories.map((cat) => {
-                            const style = getCategoryStyle(cat);
-                            return (
-                              <button
-                                key={cat}
-                                onClick={() =>
-                                  handleChangeImageCategory(image.id, cat)
-                                }
-                                className={`block w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100 mb-0.5 ${
-                                  image.category === cat
-                                    ? "bg-green-50 font-medium"
-                                    : ""
-                                }`}
-                              >
-                                <span
-                                  className={`inline-block w-2 h-2 rounded-full mr-1 ${style.bg}`}
-                                />
-                                {cat}
-                                {image.category === cat && (
-                                  <span className="ml-1 text-green-600">✓</span>
-                                )}
-                              </button>
+                      {image.src ? (
+                        <img
+                          src={image.src}
+                          alt={image.name}
+                          crossOrigin="anonymous"
+                          className="w-full h-full object-cover pointer-events-none"
+                          draggable={false}
+                          onError={(e) => {
+                            console.error(
+                              "图片加载失败:",
+                              image.id,
+                              image.name,
                             );
-                          })}
-                          <button
-                            onClick={() => setEditingImageId(null)}
-                            className="block w-full text-center px-2 py-1 text-[10px] text-gray-400 hover:text-gray-600 mt-1 border-t pt-1"
-                          >
-                            取消
-                          </button>
-                        </div>
-                      )}
-
-                      {isBatchMode && (
-                        <div
-                          className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-xs ${
-                            selectedImages.has(image.id)
-                              ? "bg-red-500 text-white"
-                              : "bg-gray-300 text-gray-500"
-                          }`}
-                        >
-                          {selectedImages.has(image.id) ? "✓" : ""}
-                        </div>
-                      )}
-                      {!isBatchMode && (
-                        <button
-                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(`删除"${image.name}"?`)) {
-                              removeImage(image.id);
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = "none";
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-xs text-gray-400">${
+                                image.name?.charAt(0) || "?"
+                              }</div>`;
                             }
                           }}
-                        >
-                          ×
-                        </button>
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                          {image.name?.charAt(0) || "?"}
+                        </div>
                       )}
                     </div>
-                  );
-                })}
+
+                    {/* 批量选择标记 */}
+                    {isBatchMode && (
+                      <div
+                        className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-xs ${
+                          selectedImages.has(image.id)
+                            ? "bg-red-500 text-white"
+                            : "bg-gray-300 text-gray-500"
+                        }`}
+                      >
+                        {selectedImages.has(image.id) ? "✓" : ""}
+                      </div>
+                    )}
+
+                    {/* 删除按钮 */}
+                    {!isBatchMode && (
+                      <button
+                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`删除"${image.name}"?`)) {
+                            removeImage(image.id);
+                          }
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
 
               {hasMore && (
-                <div className="flex justify-center mt-4">
+                <div className="flex justify-center mt-2">
                   <button
                     onClick={() => setPage(page + 1)}
                     className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
