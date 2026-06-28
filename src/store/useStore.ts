@@ -81,7 +81,7 @@ export const useStore = create<StoreState>()(
       setSelectedIds: (ids) => set({ selectedIds: new Set(ids) }),
 
       toggleSelect: (id) =>
-        set((state) => {
+        set((state: StoreState) => {
           const newSet = new Set(state.selectedIds);
           if (newSet.has(id)) {
             newSet.delete(id);
@@ -94,7 +94,7 @@ export const useStore = create<StoreState>()(
       selectOne: (id) => set({ selectedIds: new Set(id ? [id] : []) }),
 
       selectRange: (id) =>
-        set((state) => {
+        set((state: StoreState) => {
           const cards = state.placedCards;
           if (cards.length === 0) return state;
 
@@ -126,7 +126,7 @@ export const useStore = create<StoreState>()(
       clearSelection: () => set({ selectedIds: new Set<string>() }),
 
       selectAll: () =>
-        set((state) => ({
+        set((state: StoreState) => ({
           selectedIds: new Set(state.placedCards.map((c) => c.instanceId)),
         })),
 
@@ -150,13 +150,13 @@ export const useStore = create<StoreState>()(
       categories: ["中文", "英文", "未分类"],
 
       addCategory: (category) =>
-        set((state) => {
+        set((state: StoreState) => {
           if (state.categories.includes(category)) return state;
           return { categories: [...state.categories, category] };
         }),
 
       removeCategory: (category) =>
-        set((state) => ({
+        set((state: StoreState) => ({
           categories: state.categories.filter((c) => c !== category),
           images: state.images.map((img) =>
             img.category === category ? { ...img, category: "未分类" } : img,
@@ -164,14 +164,14 @@ export const useStore = create<StoreState>()(
         })),
 
       updateImageCategory: (id, category) =>
-        set((state) => ({
+        set((state: StoreState) => ({
           images: state.images.map((img) =>
             img.id === id ? { ...img, category } : img,
           ),
         })),
 
       addImage: (image) => {
-        set((state) => {
+        set((state: StoreState) => {
           const exists = state.images.some(
             (img) => img.src === image.src || img.name === image.name,
           );
@@ -194,7 +194,7 @@ export const useStore = create<StoreState>()(
       },
 
       removeImage: (id) =>
-        set((state) => ({
+        set((state: StoreState) => ({
           images: state.images.filter((img) => img.id !== id),
           placedCards: state.placedCards.filter((card) => card.imageId !== id),
         })),
@@ -211,7 +211,7 @@ export const useStore = create<StoreState>()(
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
-        set((state) => ({
+        set((state: StoreState) => ({
           scenes: [...state.scenes, newScene],
           currentSceneId: id,
           placedCards: [],
@@ -238,14 +238,14 @@ export const useStore = create<StoreState>()(
       },
 
       deleteScene: (id) =>
-        set((state) => ({
+        set((state: StoreState) => ({
           scenes: state.scenes.filter((s) => s.id !== id),
           currentSceneId:
             state.currentSceneId === id ? null : state.currentSceneId,
         })),
 
       updateScene: (id, updates) =>
-        set((state) => ({
+        set((state: StoreState) => ({
           scenes: state.scenes.map((s) =>
             s.id === id ? { ...s, ...updates, updatedAt: Date.now() } : s,
           ),
@@ -270,7 +270,7 @@ export const useStore = create<StoreState>()(
           scale: 1,
           zIndex: maxZ + 1,
         };
-        set((prevState) => ({
+        set((prevState: StoreState) => ({
           placedCards: [...prevState.placedCards, newCard],
           selectedIds: new Set([newCard.instanceId]),
         }));
@@ -278,7 +278,7 @@ export const useStore = create<StoreState>()(
       },
 
       updateCard: (instanceId, updates) => {
-        set((state) => ({
+        set((state: StoreState) => ({
           placedCards: state.placedCards.map((card) =>
             card.instanceId === instanceId ? { ...card, ...updates } : card,
           ),
@@ -286,7 +286,7 @@ export const useStore = create<StoreState>()(
       },
 
       removeCard: (instanceId) => {
-        set((state) => ({
+        set((state: StoreState) => ({
           placedCards: state.placedCards.filter(
             (c) => c.instanceId !== instanceId,
           ),
@@ -309,7 +309,7 @@ export const useStore = create<StoreState>()(
       setSnapToGrid: (snap) => set({ snapToGrid: snap }),
 
       saveHistory: () =>
-        set((state) => {
+        set((state: StoreState) => {
           const newHistory = state.history.slice(0, state.historyIndex + 1);
           newHistory.push([...state.placedCards]);
           return {
@@ -321,7 +321,7 @@ export const useStore = create<StoreState>()(
         }),
 
       undo: () =>
-        set((state) => {
+        set((state: StoreState) => {
           if (state.historyIndex <= 0) return state;
           const newIndex = state.historyIndex - 1;
           return {
@@ -334,7 +334,7 @@ export const useStore = create<StoreState>()(
         }),
 
       redo: () =>
-        set((state) => {
+        set((state: StoreState) => {
           if (state.historyIndex >= state.history.length - 1) return state;
           const newIndex = state.historyIndex + 1;
           return {
@@ -347,14 +347,14 @@ export const useStore = create<StoreState>()(
         }),
 
       copy: () =>
-        set((state) => ({
+        set((state: StoreState) => ({
           clipboard: state.placedCards.filter((c) =>
             state.selectedIds.has(c.instanceId),
           ),
         })),
 
       paste: () =>
-        set((state) => {
+        set((state: StoreState) => {
           if (state.clipboard.length === 0) return state;
           const maxZ = Math.max(0, ...state.placedCards.map((c) => c.zIndex));
           const newCards = state.clipboard.map((card, idx) => ({
@@ -399,7 +399,7 @@ export const useStore = create<StoreState>()(
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };
-          set((state) => ({
+          set((state: StoreState) => ({
             scenes: [...state.scenes, newScene],
             currentSceneId: id,
             placedCards: newScene.cards,
@@ -452,7 +452,7 @@ export const useStore = create<StoreState>()(
       },
 
       cleanDuplicateImages: () => {
-        set((state) => {
+        set((state: StoreState) => {
           const seen = new Map<string, CardImage>();
           const duplicates: CardImage[] = [];
 
