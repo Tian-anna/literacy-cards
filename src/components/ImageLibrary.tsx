@@ -14,7 +14,11 @@ import {
 type SortField = "name" | "createdAt";
 type SortOrder = "asc" | "desc";
 
-const ImageLibrary: React.FC = () => {
+interface ImageLibraryProps {
+  onWidthChange?: (width: number) => void;
+}
+
+const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
   const {
     images,
     addImage,

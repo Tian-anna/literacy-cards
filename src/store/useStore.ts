@@ -495,7 +495,7 @@ export const useStore = create<StoreState>()(
           await del(name);
         },
       })),
-      partialize: (state) => ({
+      partialize: (state: StoreState) => ({
         images: state.images,
         scenes: state.scenes,
         currentSceneId: state.currentSceneId,
