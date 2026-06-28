@@ -93,7 +93,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     [placedCards],
   );
 
-  // ========== 鼠标事件 ==========
   const handleCanvasMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
@@ -157,7 +156,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
   }, [isBoxSelecting, getCanvasPoint, getCardsInBox, selectionBox]);
 
-  // ========== iPad 触摸框选 ==========
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -251,7 +249,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
   }, [getCanvasPoint, getCardsInBox, clearSelection]);
 
-  // 键盘快捷键
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "a") {

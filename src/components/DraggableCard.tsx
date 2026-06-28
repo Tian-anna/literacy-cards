@@ -37,7 +37,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
 
   const isSelected = selectedIds.has(card.instanceId);
 
-  // ========== 鼠标事件 ==========
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -90,7 +89,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     ],
   );
 
-  // 鼠标拖拽中
   useEffect(() => {
     if (!isDragging) return;
 
@@ -126,7 +124,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     };
   }, [isDragging, snapToGrid, gridSize, updateCard, setIsDragging]);
 
-  // ========== iPad 触摸事件 ==========
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;

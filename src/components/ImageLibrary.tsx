@@ -1,60 +1,42 @@
 import React, {
-  useRef,
   useState,
-  useCallback,
   useEffect,
+  useRef,
+  useCallback,
   useMemo,
 } from "react";
 import { useStore } from "@/store/useStore";
-import {
-  uploadImageToGitHub,
-  deleteImageFromGitHub,
-} from "@/utils/imageupload";
-
-type SortField = "name" | "createdAt";
-type SortOrder = "asc" | "desc";
+import { ImageItem } from "@/types";
 
 interface ImageLibraryProps {
-  onWidthChange?: (width: number) => void;
+  onAddToCanvas?: (imageId: string) => void;
 }
 
-const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
+const ITEMS_PER_PAGE = 20;
+
+const ImageLibrary: React.FC<ImageLibraryProps> = ({ onAddToCanvas }) => {
   const {
     images,
     addImage,
     removeImage,
-    addCardToScene,
-    cleanInvalidImages,
-    cleanDuplicateImages,
+    updateImage,
     categories,
     addCategory,
     removeCategory,
-    updateImageCategory,
   } = useStore();
   const [isExpanded, setIsExpanded] = useState(true);
-  const [width, setWidth] = useState(200);
-  const [isResizing, setIsResizing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("全部");
   const [page, setPage] = useState(1);
-  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
-  const [isBatchMode, setIsBatchMode] = useState(false);
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({
-    current: 0,
-    total: 0,
-  });
-  const [isCleaning, setIsCleaning] = useState(false);
+  const [sortBy, setSortBy] = useState<"name" | "date">("name");
   const [isSyncing, setIsSyncing] = useState(false);
-
-  const [activeCategory, setActiveCategory] = useState<string>("全部");
-  const [isManagingCategories, setIsManagingCategories] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [batchCategoryTarget, setBatchCategoryTarget] = useState<string>("");
-
   const [githubCount, setGithubCount] = useState<number | null>(null);
   const [isLoadingGithubCount, setIsLoadingGithubCount] = useState(false);
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
+  const [isManagingCategories, setIsManagingCategories] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchGithubCount = useCallback(async () => {
     setIsLoadingGithubCount(true);
@@ -63,7 +45,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
         "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
       );
       if (!res.ok) throw new Error("获取失败");
-
       const files = await res.json();
       const imageFiles = files.filter(
         (file: any) =>
@@ -84,18 +65,39 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     fetchGithubCount();
   }, [fetchGithubCount]);
 
-  useEffect(() => {
-    if (!isSyncing && githubCount !== null) {
-      fetchGithubCount();
+  const filteredImages = useMemo(() => {
+    let result = [...images];
+
+    if (selectedCategory !== "全部") {
+      result = result.filter((img) => img.category === selectedCategory);
     }
-  }, [isSyncing, fetchGithubCount]);
 
-  const ITEMS_PER_PAGE = 40;
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const resizeRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (img) =>
+          img.name.toLowerCase().includes(term) ||
+          (img.category && img.category.toLowerCase().includes(term)),
+      );
+    }
 
-  // 手动同步 GitHub 图片
+    if (sortBy === "name") {
+      result.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+    } else {
+      result.sort((a, b) => (b.id > a.id ? 1 : -1));
+    }
+
+    return result;
+  }, [images, selectedCategory, searchTerm, sortBy]);
+
+  const totalCount = filteredImages.length;
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const paginatedImages = filteredImages.slice(
+    (page - 1) * ITEMS_PER_PAGE,
+    page * ITEMS_PER_PAGE,
+  );
+  const hasMore = page < totalPages;
+
   const handleSyncFromGitHub = async () => {
     if (images.length > 0) {
       if (!confirm("本地已有图片，同步可能导致重复。是否继续？")) return;
@@ -109,6 +111,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
       if (!res.ok) throw new Error("加载失败");
 
       const files = await res.json();
+
       const imageFiles = files.filter(
         (file: any) =>
           file.type === "file" &&
@@ -121,7 +124,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
         const imageUrl = file.download_url;
 
         const exists = images.some(
-          (img: any) =>
+          (img: ImageItem) =>
             img.src === imageUrl ||
             img.name === file.name.replace(/\.[^/.]+$/, ""),
         );
@@ -138,6 +141,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
       }
 
       alert(`同步完成，新增 ${addedCount} 张图片`);
+      fetchGithubCount();
     } catch (error) {
       console.error("从 GitHub 加载图片失败:", error);
       alert("同步失败，请查看控制台");
@@ -146,443 +150,123 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     }
   };
 
-  // 文件上传
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    const imageFiles = Array.from(files).filter((file) =>
-      file.type.startsWith("image/"),
-    );
-
-    if (imageFiles.length === 0) {
-      alert("请选择图片文件");
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadProgress({ current: 0, total: imageFiles.length });
-
-    let successCount = 0;
-    let skipCount = 0;
-    let failCount = 0;
-
-    let githubFiles: any[] = [];
-    try {
-      const res = await fetch(
-        "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
-      );
-      if (res.ok) {
-        githubFiles = await res.json();
-      }
-    } catch (error) {
-      console.error("获取 GitHub 文件列表失败:", error);
-    }
-
-    for (let i = 0; i < imageFiles.length; i++) {
-      const file = imageFiles[i];
-      const fileName = file.name.replace(/\.[^/.]+$/, "");
-
-      setUploadProgress({
-        current: i + 1,
-        total: imageFiles.length,
-      });
-
-      const existsLocal = images.some((img) => img.name === fileName);
-      if (existsLocal) {
-        console.log("本地已存在，跳过:", fileName);
-        skipCount++;
-        continue;
-      }
-
-      const existsGitHub = githubFiles.some(
-        (f: any) => f.name.includes(`_${fileName}.`) || f.name === file.name,
-      );
-      if (existsGitHub) {
-        console.log("GitHub 已存在，跳过:", fileName);
-        skipCount++;
-        continue;
-      }
-
-      try {
-        const imageUrl = await uploadImageToGitHub(file);
-
-        const img = new Image();
-        await new Promise<void>((resolve) => {
-          img.onload = () => resolve();
-          img.onerror = () => {
-            img.width = 300;
-            img.height = 300;
-            resolve();
-          };
-          img.src = imageUrl;
-        });
-
-        addImage({
-          src: imageUrl,
-          name: fileName,
-          category: activeCategory === "全部" ? "未分类" : activeCategory,
-          width: img.width,
-          height: img.height,
-        });
-
-        console.log("上传成功:", fileName);
-        successCount++;
-
-        githubFiles.push({ name: `${Date.now()}_${file.name}` });
-      } catch (error) {
-        console.error("上传失败:", fileName, error);
-        failCount++;
-      }
-
-      if (i < imageFiles.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 800));
-      }
-    }
-
-    setIsUploading(false);
-    setUploadProgress({ current: 0, total: 0 });
-    e.target.value = "";
-
-    fetchGithubCount();
-
-    const messages: string[] = [];
-    if (successCount > 0) messages.push(`成功 ${successCount} 张`);
-    if (skipCount > 0) messages.push(`跳过 ${skipCount} 张（已存在）`);
-    if (failCount > 0) messages.push(`失败 ${failCount} 张`);
-
-    alert(messages.join("，") || "上传完成");
-  };
-
-  // 清理按钮
-  const handleCleanImages = async () => {
-    if (
-      !confirm(
-        "清理重复和无效的图片？\n（仅清理本地显示，不会删除 GitHub 文件）",
-      )
-    )
-      return;
-
-    setIsCleaning(true);
-    try {
-      cleanDuplicateImages();
-      await cleanInvalidImages();
-      alert("清理完成！仅移除了本地重复/无效记录，GitHub 文件不受影响。");
-    } catch (error) {
-      console.error("清理失败:", error);
-      alert("清理失败，请查看控制台");
-    } finally {
-      setIsCleaning(false);
-    }
-  };
-
-  // 分类管理
-  const handleAddCategory = () => {
-    const name = newCategoryName.trim();
-    if (!name) return;
-    if (categories.includes(name)) {
-      alert("分类已存在");
-      return;
-    }
-    addCategory(name);
-    setNewCategoryName("");
-  };
-
-  const handleRemoveCategory = (category: string) => {
-    if (!confirm(`删除分类"${category}"？该分类下的图片将变为"未分类"。`))
-      return;
-    removeCategory(category);
-    if (activeCategory === category) setActiveCategory("全部");
-  };
-
-  const handleBatchChangeCategory = () => {
-    if (selectedImages.size === 0 || !batchCategoryTarget) return;
-    if (
-      !confirm(
-        `将选中的 ${selectedImages.size} 张图片移到"${batchCategoryTarget}"分类？`,
-      )
-    )
-      return;
-    selectedImages.forEach((id) =>
-      updateImageCategory(id, batchCategoryTarget),
-    );
-    setSelectedImages(new Set());
-    setBatchCategoryTarget("");
-    alert("批量修改分类完成！");
-  };
-
-  const handleSortChange = (field: SortField) => {
-    setPage(1);
-    setSelectedImages(new Set());
-
-    if (sortField === field) {
-      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(field);
-      setSortOrder("asc");
-    }
-  };
-
-  const sortedImages = useMemo(() => {
-    if (images.length === 0) return [];
-    const sorted = [...images];
-    try {
-      sorted.sort((a, b) => {
-        let comparison = 0;
-        if (sortField === "name") {
-          comparison = (a.name || "").localeCompare(b.name || "", "zh-CN");
-        } else if (sortField === "createdAt") {
-          comparison = (a.createdAt || 0) - (b.createdAt || 0);
+  const handleImageClick = (imageId: string) => {
+    if (isBatchMode) {
+      setSelectedImages((prev) => {
+        const next = new Set(prev);
+        if (next.has(imageId)) {
+          next.delete(imageId);
+        } else {
+          next.add(imageId);
         }
-        return sortOrder === "asc" ? comparison : -comparison;
+        return next;
       });
-    } catch (err) {
-      console.error("排序出错:", err);
+    } else {
+      onAddToCanvas?.(imageId);
     }
-    return sorted;
-  }, [images, sortField, sortOrder]);
+  };
 
-  const filteredImages = useMemo(() => {
-    if (!searchTerm.trim()) return sortedImages;
-    const term = searchTerm.toLowerCase();
-    return sortedImages.filter((img) =>
-      (img.name || "").toLowerCase().includes(term),
-    );
-  }, [sortedImages, searchTerm]);
+  const handleAddCategory = () => {
+    if (newCategoryName.trim()) {
+      addCategory(newCategoryName.trim());
+      setNewCategoryName("");
+    }
+  };
 
-  const categoryFilteredImages = useMemo(() => {
-    if (activeCategory === "全部") return filteredImages;
-    return filteredImages.filter((img) => img.category === activeCategory);
-  }, [filteredImages, activeCategory]);
-
-  const paginatedImages = useMemo(() => {
-    return categoryFilteredImages.slice(0, page * ITEMS_PER_PAGE);
-  }, [categoryFilteredImages, page]);
-
-  const hasMore = paginatedImages.length < categoryFilteredImages.length;
-  const totalCount = categoryFilteredImages.length;
-
-  const toggleSelect = (id: string) => {
-    setSelectedImages((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  const handleBatchSetCategory = (category: string) => {
+    selectedImages.forEach((id) => {
+      updateImage(id, { category });
     });
-  };
-
-  const selectAll = () => {
-    setSelectedImages(new Set(paginatedImages.map((img) => img.id)));
-  };
-
-  const deselectAll = () => {
-    setSelectedImages(new Set());
-  };
-
-  const handleBatchDelete = () => {
-    if (selectedImages.size === 0) return;
-    if (!confirm(`确定删除选中的 ${selectedImages.size} 张图片吗？`)) return;
-    selectedImages.forEach((id) => removeImage(id));
     setSelectedImages(new Set());
     setIsBatchMode(false);
   };
 
-  const handleImageClick = (imageId: string) => {
-    if (isBatchMode) {
-      toggleSelect(imageId);
-    } else {
-      addCardToScene(imageId);
+  const handleBatchDelete = () => {
+    if (confirm(`确定删除选中的 ${selectedImages.size} 张图片吗？`)) {
+      selectedImages.forEach((id) => removeImage(id));
+      setSelectedImages(new Set());
+      setIsBatchMode(false);
     }
   };
 
-  const startResizing = useCallback((clientX: number) => {
-    setIsResizing(true);
-  }, []);
-
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      startResizing(e.clientX);
-    },
-    [startResizing],
-  );
-
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      e.stopPropagation();
-      const touch = e.touches[0];
-      startResizing(touch.clientX);
-    },
-    [startResizing],
-  );
-
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = e.clientX;
-      setWidth(Math.max(80, newWidth));
-      onWidthChange?.(Math.max(80, newWidth));
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      const newWidth = touch.clientX;
-      setWidth(Math.max(80, newWidth));
-      onWidthChange?.(Math.max(80, newWidth));
-    };
-
-    const handleMouseUp = () => setIsResizing(false);
-    const handleTouchEnd = () => setIsResizing(false);
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    document.addEventListener("touchmove", handleTouchMove, { passive: false });
-    document.addEventListener("touchend", handleTouchEnd);
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.removeEventListener("touchmove", handleTouchMove);
-      document.removeEventListener("touchend", handleTouchEnd);
-    };
-  }, [isResizing, onWidthChange]);
-
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    categories.forEach((cat) => {
-      counts[cat] = images.filter((img) => img.category === cat).length;
-    });
-    counts["全部"] = images.length;
-    return counts;
-  }, [images, categories]);
+  const handleCleanInvalid = () => {
+    if (confirm("确定清理所有无效图片吗？")) {
+      useStore.getState().cleanInvalidImages();
+    }
+  };
 
   return (
-    <div
-      className="bg-white border-r border-gray-300 shadow-lg flex flex-col relative h-full select-none"
-      style={{
-        width: isExpanded ? `${width}px` : "40px",
-        minWidth: isExpanded ? "80px" : "40px",
-      }}
-    >
-      {isExpanded && (
-        <div
-          ref={resizeRef}
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleTouchStart}
-          style={{
-            width: "24px",
-            background: isResizing ? "rgba(76,175,80,0.3)" : "transparent",
-            cursor: "ew-resize",
-            position: "absolute",
-            top: 0,
-            bottom: 0,
-            right: "-12px",
-            zIndex: 100,
-            touchAction: "none",
-          }}
-          title="左右拖拽调整宽度"
-        />
-      )}
-
-      <div className="flex items-center justify-between px-2 py-2 bg-gray-50">
-        <div
-          className="flex items-center gap-1 cursor-pointer hover:bg-gray-100 rounded px-1 py-1"
+    <div className="h-full flex flex-col bg-white border-r border-gray-200">
+      <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
+        <button
           onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
         >
-          <span className="text-lg">🖼️</span>
-          {isExpanded && (
-            <span className="font-medium text-gray-700 text-sm">
-              {totalCount}
-            </span>
-          )}
-          <span className="text-gray-400 text-xs">
-            {isExpanded ? "◀" : "▶"}
-          </span>
-        </div>
+          <span>{isExpanded ? "▼" : "▶"}</span>
+          <span>图片图库</span>
+        </button>
+        <span className="text-xs text-gray-400">{images.length} 张</span>
       </div>
 
       {isExpanded && (
-        <div
-          ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto p-2"
-          style={{
-            WebkitOverflowScrolling: "touch",
-            overscrollBehavior: "contain",
-          }}
-        >
-          <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-xs text-gray-500">
-              GitHub:
+        <>
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>GitHub:</span>
               {isLoadingGithubCount ? (
-                <span className="inline-block w-3 h-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin ml-1" />
+                <span className="animate-pulse">加载中...</span>
               ) : githubCount !== null ? (
-                <span className="font-medium text-blue-600 ml-1">
-                  {githubCount} 张
-                </span>
+                <span className="text-green-600">{githubCount} 张</span>
               ) : (
-                <span className="text-red-400 ml-1">获取失败</span>
+                <span className="text-red-400">获取失败</span>
               )}
-            </span>
-            <button
-              onClick={fetchGithubCount}
-              disabled={isLoadingGithubCount}
-              className="text-xs text-blue-500 hover:text-blue-700 disabled:text-gray-400"
-              title="刷新数量"
-            >
-              🔄
-            </button>
+            </div>
           </div>
 
-          <div className="mb-2">
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-500 font-medium">
-                分类筛选
-              </span>
+              <span className="text-xs text-gray-500">分类筛选</span>
               <button
                 onClick={() => setIsManagingCategories(!isManagingCategories)}
-                className="text-xs text-blue-500 hover:text-blue-700"
+                className="text-xs text-blue-500 hover:text-blue-600"
               >
                 {isManagingCategories ? "完成" : "管理"}
               </button>
             </div>
+
             <div className="flex flex-wrap gap-1">
               {["全部", ...categories].map((cat) => (
                 <button
                   key={cat}
                   onClick={() => {
-                    setActiveCategory(cat);
+                    setSelectedCategory(cat);
                     setPage(1);
                   }}
-                  className={`px-2 py-0.5 rounded-full text-xs transition-colors ${
-                    activeCategory === cat
-                      ? "bg-[#4CAF50] text-white"
-                      : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                  className={`px-2 py-0.5 rounded text-xs ${
+                    selectedCategory === cat
+                      ? "bg-green-500 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
                   {cat}
-                  <span className="ml-0.5 opacity-70">
-                    {categoryCounts[cat] || 0}
-                  </span>
                 </button>
               ))}
             </div>
+
             {isManagingCategories && (
-              <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
-                <div className="flex items-center gap-1 mb-2">
+              <div className="mt-2 p-2 bg-gray-50 rounded">
+                <div className="flex gap-1 mb-2">
                   <input
                     type="text"
-                    placeholder="新分类名称"
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#4CAF50]"
+                    placeholder="新分类名称"
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500"
                   />
                   <button
                     onClick={handleAddCategory}
-                    className="px-2 py-1 bg-[#4CAF50] text-white rounded text-xs hover:bg-green-600"
+                    className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
                   >
                     添加
                   </button>
@@ -593,12 +277,12 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                     .map((cat) => (
                       <span
                         key={cat}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded-full text-xs text-gray-600"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded text-xs"
                       >
                         {cat}
                         <button
-                          onClick={() => handleRemoveCategory(cat)}
-                          className="text-red-400 hover:text-red-600 font-bold"
+                          onClick={() => removeCategory(cat)}
+                          className="text-red-400 hover:text-red-600"
                         >
                           ×
                         </button>
@@ -609,257 +293,210 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             )}
           </div>
 
-          <div className="flex items-center gap-1 mb-2">
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
             <button
               onClick={handleSyncFromGitHub}
               disabled={isSyncing}
-              className={`flex-1 py-1 rounded text-xs ${
-                isSyncing
-                  ? "bg-blue-300 text-white cursor-not-allowed"
-                  : "bg-blue-500 text-white hover:bg-blue-600"
-              }`}
+              className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
             >
-              {isSyncing ? "同步中..." : "🔄 同步"}
+              {isSyncing ? (
+                <>
+                  <span className="animate-spin">↻</span>
+                  <span>同步中...</span>
+                </>
+              ) : (
+                <>
+                  <span>🔄</span>
+                  <span>从 GitHub 同步</span>
+                </>
+              )}
             </button>
           </div>
 
-          <div className="mb-2">
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
             <input
               type="text"
-              placeholder="搜索..."
+              placeholder="搜索图片..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
                 setPage(1);
                 setSelectedImages(new Set());
               }}
-              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#4CAF50]"
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500"
             />
           </div>
 
-          <div className="flex items-center gap-1 mb-2">
+          <div className="flex-shrink-0 px-3 py-1 border-b border-gray-100 flex gap-2">
             <button
-              onClick={() => handleSortChange("name")}
-              className={`px-2 py-1 rounded text-xs transition-colors ${
-                sortField === "name"
-                  ? "bg-[#4CAF50] text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              onClick={() => setSortBy("name")}
+              className={`text-xs px-2 py-0.5 rounded ${
+                sortBy === "name"
+                  ? "bg-green-500 text-white"
+                  : "bg-gray-100 text-gray-600"
               }`}
             >
-              名称{sortField === "name" && (sortOrder === "asc" ? " ▲" : " ▼")}
+              按名称
             </button>
             <button
-              onClick={() => handleSortChange("createdAt")}
-              className={`px-2 py-1 rounded text-xs transition-colors ${
-                sortField === "createdAt"
-                  ? "bg-[#4CAF50] text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              onClick={() => setSortBy("date")}
+              className={`text-xs px-2 py-0.5 rounded ${
+                sortBy === "date"
+                  ? "bg-green-500 text-white"
+                  : "bg-gray-100 text-gray-600"
               }`}
             >
-              时间
-              {sortField === "createdAt" && (sortOrder === "asc" ? " ▲" : " ▼")}
+              按日期
             </button>
           </div>
 
-          <div className="flex items-center gap-1 mb-2">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className={`flex-1 py-1 rounded text-xs ${
-                isUploading
-                  ? "bg-gray-400 text-white cursor-not-allowed"
-                  : "bg-[#4CAF50] text-white hover:bg-green-600"
-              }`}
-            >
-              {isUploading
-                ? `上传中 ${uploadProgress.current}/${uploadProgress.total}`
-                : "+ 添加"}
-            </button>
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 flex gap-2">
             <button
               onClick={() => {
                 setIsBatchMode(!isBatchMode);
                 setSelectedImages(new Set());
-                setBatchCategoryTarget("");
               }}
-              className={`px-2 py-1 rounded text-xs transition-colors ${
+              className={`flex-1 px-2 py-1 rounded text-xs ${
                 isBatchMode
                   ? "bg-orange-500 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
-              {isBatchMode ? "完成" : "多选"}
+              {isBatchMode ? "退出多选" : "批量操作"}
             </button>
-          </div>
-
-          <div className="flex items-center gap-1 mb-2">
             <button
-              onClick={handleCleanImages}
-              disabled={isCleaning}
-              className={`w-full py-1 rounded text-xs ${
-                isCleaning
-                  ? "bg-purple-300 text-white cursor-not-allowed"
-                  : "bg-purple-500 text-white hover:bg-purple-600"
-              }`}
+              onClick={handleCleanInvalid}
+              className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200"
             >
-              {isCleaning ? "清理中..." : "🧹 清理重复/无效"}
+              清理无效
             </button>
           </div>
 
           {isBatchMode && (
-            <div className="flex flex-col gap-1 mb-2 p-2 bg-orange-50 rounded border border-orange-200">
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1">
               <div className="flex items-center gap-1">
-                <button
-                  onClick={selectAll}
-                  className="flex-1 bg-blue-500 text-white py-1 rounded text-xs hover:bg-blue-600"
-                >
-                  全选
-                </button>
-                <button
-                  onClick={deselectAll}
-                  className="flex-1 bg-gray-500 text-white py-1 rounded text-xs hover:bg-gray-600"
-                >
-                  取消
-                </button>
+                <span className="text-xs text-gray-500">
+                  已选 {selectedImages.size} 张
+                </span>
                 <button
                   onClick={handleBatchDelete}
                   disabled={selectedImages.size === 0}
-                  className="flex-1 bg-red-500 text-white py-1 rounded text-xs hover:bg-red-600 disabled:opacity-50"
+                  className="ml-auto px-2 py-0.5 bg-red-500 text-white rounded text-xs disabled:opacity-50 hover:bg-red-600"
                 >
-                  删除({selectedImages.size})
+                  删除
                 </button>
               </div>
-              <div className="flex items-center gap-1 mt-1 pt-1 border-t border-orange-200">
-                <span className="text-[10px] text-gray-500 whitespace-nowrap">
-                  移到:
-                </span>
-                <select
-                  value={batchCategoryTarget}
-                  onChange={(e) => setBatchCategoryTarget(e.target.value)}
-                  className="flex-1 px-1 py-1 border border-gray-300 rounded text-xs bg-white"
-                >
-                  <option value="">选择分类...</option>
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={handleBatchChangeCategory}
-                  disabled={selectedImages.size === 0 || !batchCategoryTarget}
-                  className="px-2 py-1 bg-[#4CAF50] text-white rounded text-xs hover:bg-green-600 disabled:opacity-50 whitespace-nowrap"
-                >
-                  移动({selectedImages.size})
-                </button>
-              </div>
-            </div>
-          )}
-
-          {totalCount === 0 ? (
-            <div className="text-center text-gray-400 py-4">
-              <p className="text-xs">
-                {searchTerm ? "无结果" : "暂无图片，点击 🔄 同步从 GitHub 加载"}
-              </p>
-            </div>
-          ) : (
-            <div>
-              <div className="flex flex-wrap gap-2">
-                {paginatedImages.map((image) => (
-                  <div
-                    key={image.id}
-                    className={`group relative cursor-pointer hover:scale-105 transition-transform ${
-                      selectedImages.has(image.id)
-                        ? "ring-2 ring-red-500 rounded-lg"
-                        : ""
-                    }`}
-                    onClick={() => handleImageClick(image.id)}
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500">移到:</span>
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => handleBatchSetCategory(cat)}
+                    disabled={selectedImages.size === 0}
+                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs disabled:opacity-50 hover:bg-gray-200"
                   >
-                    <div
-                      className={`bg-gray-100 rounded-lg overflow-hidden border-2 shadow-sm ${
-                        selectedImages.has(image.id)
-                          ? "border-red-500"
-                          : "border-gray-200 hover:border-[#4CAF50]"
-                      }`}
-                      style={{ width: "64px", height: "64px" }}
-                    >
-                      {image.src ? (
-                        <img
-                          src={image.src}
-                          alt={image.name}
-                          className="w-full h-full object-cover pointer-events-none"
-                          draggable={false}
-                          loading="lazy"
-                          onError={(e) => {
-                            console.error(
-                              "图片加载失败:",
-                              image.id,
-                              image.name,
-                              image.src,
-                            );
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = "none";
-                            const parent = target.parentElement;
-                            if (parent) {
-                              parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center leading-tight px-1 break-all">${image.name || "?"}</div>`;
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center leading-tight px-1 break-all">
-                          {image.name || "?"}
-                        </div>
-                      )}
-                    </div>
-                    {isBatchMode && (
-                      <div
-                        className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-xs ${
-                          selectedImages.has(image.id)
-                            ? "bg-red-500 text-white"
-                            : "bg-gray-300 text-gray-500"
-                        }`}
-                      >
-                        {selectedImages.has(image.id) ? "✓" : ""}
-                      </div>
-                    )}
-                    {!isBatchMode && (
-                      <button
-                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm(`删除"${image.name}"?`))
-                            removeImage(image.id);
-                        }}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
+                    {cat}
+                  </button>
                 ))}
               </div>
-              {hasMore && (
-                <div className="flex justify-center mt-2">
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
-                  >
-                    更多(
-                    {categoryFilteredImages.length - paginatedImages.length})
-                  </button>
-                </div>
-              )}
             </div>
           )}
-        </div>
-      )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={handleFileUpload}
-      />
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-y-auto p-2"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              overscrollBehavior: "contain",
+            }}
+          >
+            {totalCount === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">
+                {searchTerm ? "无结果" : "暂无图片，点击 🔄 同步从 GitHub 加载"}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {paginatedImages.map((image) => (
+                    <div
+                      key={image.id}
+                      className={`relative aspect-square rounded-lg overflow-hidden border-2 cursor-pointer transition-all hover:shadow-md ${
+                        isBatchMode && selectedImages.has(image.id)
+                          ? "border-green-500 ring-2 ring-green-300"
+                          : "border-gray-200 hover:border-green-300"
+                      }`}
+                      onClick={() => handleImageClick(image.id)}
+                    >
+                      <div className="w-full h-full bg-gray-50">
+                        {image.src ? (
+                          <img
+                            src={image.src}
+                            alt={image.name}
+                            className="w-full h-full object-cover pointer-events-none"
+                            draggable={false}
+                            loading="lazy"
+                            onError={(e) => {
+                              console.error(
+                                "图片加载失败:",
+                                image.id,
+                                image.name,
+                                image.src,
+                              );
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center leading-tight px-1 break-all">${image.name || "?"}</div>`;
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                            {image.name || "?"}
+                          </div>
+                        )}
+                      </div>
+
+                      {isBatchMode && (
+                        <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-green-500 text-white text-xs flex items-center justify-center">
+                          {selectedImages.has(image.id) ? "✓" : ""}
+                        </div>
+                      )}
+
+                      {!isBatchMode && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`确定删除 "${image.name}" 吗？`)) {
+                              removeImage(image.id);
+                            }
+                          }}
+                          className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
+                      )}
+
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate">
+                        {image.name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {hasMore && (
+                  <button
+                    onClick={() => setPage((p) => p + 1)}
+                    className="w-full mt-2 py-1.5 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                  >
+                    加载更多 ({page}/{totalPages})
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
