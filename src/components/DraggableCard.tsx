@@ -27,6 +27,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     new Map(),
   );
   const isTouchDraggingRef = useRef(false);
+  const [imageLoaded, setImageLoaded] = useState(true);
 
   const image = images.find((img) => img.id === card.imageId);
   if (!image) {
@@ -125,7 +126,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     };
   }, [isDragging, snapToGrid, gridSize, updateCard, setIsDragging]);
 
-  // ========== iPad 触摸事件（关键修复：使用原生 addEventListener + { passive: false }）==========
+  // ========== iPad 触摸事件（修复：使用原生 addEventListener + { passive: false }）==========
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -136,7 +137,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     let hasMoved = false;
 
     const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault(); // 关键：阻止默认滚动行为
+      e.preventDefault();
       e.stopPropagation();
 
       const touch = e.touches[0];
@@ -148,7 +149,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
 
       const store = useStore.getState();
 
-      // 记录所有选中卡片的初始位置
       initialPositionsRef.current = new Map();
       store.placedCards.forEach((c) => {
         if (store.selectedIds.has(c.instanceId)) {
@@ -165,14 +165,13 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault(); // 关键：阻止默认滚动
+      e.preventDefault();
       e.stopPropagation();
 
       const touch = e.touches[0];
       const dx = touch.clientX - dragStartRef.current.x;
       const dy = touch.clientY - dragStartRef.current.y;
 
-      // 移动超过 5px 才开始拖拽
       if (
         !isTouchDraggingRef.current &&
         (Math.abs(dx) > 5 || Math.abs(dy) > 5)
@@ -182,11 +181,9 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
         setIsDraggingLocal(true);
         setIsDragging(true);
 
-        // 如果当前卡片不在选中集合中，只选这一张
         const store = useStore.getState();
         if (!store.selectedIds.has(card.instanceId)) {
           selectOne(card.instanceId);
-          // 重新记录位置（只有当前卡片）
           initialPositionsRef.current = new Map();
           initialPositionsRef.current.set(card.instanceId, {
             x: card.x,
@@ -216,19 +213,17 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       const touchDuration = Date.now() - touchStartTime;
 
       if (isTouchDraggingRef.current) {
-        // 拖拽结束
         setIsDraggingLocal(false);
         setIsDragging(false);
         useStore.getState().saveHistory();
       } else if (touchDuration < 300 && !hasMoved) {
-        // 短按（点击）—— 切换选中状态
         e.preventDefault();
         const store = useStore.getState();
         if (
           store.selectedIds.has(card.instanceId) &&
           store.selectedIds.size === 1
         ) {
-          selectOne(""); // 清空选择
+          selectOne("");
         } else {
           selectOne(card.instanceId);
         }
@@ -237,7 +232,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       isTouchDraggingRef.current = false;
     };
 
-    // 关键：使用 { passive: false } 绑定原生事件
     el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: false });
@@ -286,8 +280,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
         userSelect: "none",
       }}
       onMouseDown={handleMouseDown}
-      // 注意：不使用 onTouchStart/onTouchMove/onTouchEnd JSX 属性
-      // 触摸事件通过 useEffect + addEventListener 绑定（设置 { passive: false }）
     >
       {/* 选中标记（多选时显示数量） */}
       {isSelected && selectedIds.size > 1 && (
@@ -296,13 +288,24 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
         </div>
       )}
 
-      <img
-        src={image.src}
-        alt={image.name}
-        className="w-full h-full object-cover rounded-lg pointer-events-none"
-        draggable={false}
-        style={{ pointerEvents: "none" }}
-      />
+      {/* 修复：移除 crossOrigin="anonymous"，添加 onError 处理 */}
+      {imageLoaded ? (
+        <img
+          src={image.src}
+          alt={image.name}
+          className="w-full h-full object-cover rounded-lg pointer-events-none"
+          draggable={false}
+          style={{ pointerEvents: "none" }}
+          onError={() => {
+            console.error("画布图片加载失败:", image.src);
+            setImageLoaded(false);
+          }}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 bg-gray-100 rounded-lg">
+          {image.name || "?"}
+        </div>
+      )}
 
       {/* 选中时显示操作按钮 */}
       {isSelected && (
