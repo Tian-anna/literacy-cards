@@ -94,8 +94,9 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
   const ITEMS_PER_PAGE = 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // 手动同步 GitHub 图片
+  // 手动同步 GitHub 图片（修复：使用 GitHub Pages 链接）
   const handleSyncFromGitHub = async () => {
     if (images.length > 0) {
       if (!confirm("本地已有图片，同步可能导致重复。是否继续？")) return;
@@ -113,8 +114,15 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
 
       let addedCount = 0;
       for (const file of imageFiles) {
-        const imageUrl = encodeURI(file.download_url);
-        const exists = images.some((img: any) => img.src === imageUrl);
+        // 修复：使用 GitHub Pages 链接代替 raw 链接，避免中文/特殊字符 400 错误
+        const imageUrl = `https://tian-anna.github.io/literacy-cards/images/${encodeURIComponent(file.name)}`;
+
+        const exists = images.some(
+          (img: any) =>
+            img.src === imageUrl ||
+            img.src === file.download_url ||
+            img.name === file.name.replace(/\.[^/.]+$/, ""),
+        );
         if (!exists) {
           addImage({
             src: imageUrl,
@@ -437,6 +445,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = e.clientX;
       setWidth(Math.max(80, newWidth));
+      onWidthChange?.(Math.max(80, newWidth));
     };
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -444,6 +453,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
       const touch = e.touches[0];
       const newWidth = touch.clientX;
       setWidth(Math.max(80, newWidth));
+      onWidthChange?.(Math.max(80, newWidth));
     };
 
     const handleMouseUp = () => setIsResizing(false);
@@ -460,7 +470,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
       document.removeEventListener("touchmove", handleTouchMove);
       document.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [isResizing]);
+  }, [isResizing, onWidthChange]);
 
   // 统计各分类数量
   const categoryCounts = useMemo(() => {
@@ -519,9 +529,16 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
         </div>
       </div>
 
-      {/* 图库内容 */}
+      {/* 图库内容 - 修复：添加 -webkit-overflow-scrolling: touch 支持 iPad 滚动 */}
       {isExpanded && (
-        <div className="flex-1 overflow-y-auto p-2">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto p-2"
+          style={{
+            WebkitOverflowScrolling: "touch", // 关键：iPad Safari 平滑滚动
+            overscrollBehavior: "contain", // 防止滚动链传播到父元素
+          }}
+        >
           {/* GitHub 图片数量 */}
           <div className="flex items-center justify-between mb-2 px-1">
             <span className="text-xs text-gray-500">
@@ -726,7 +743,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             </button>
           </div>
 
-          {/* 批量模式操作按钮 - 包含批量修改分类 */}
+          {/* 批量模式操作按钮 */}
           {isBatchMode && (
             <div className="flex flex-col gap-1 mb-2 p-2 bg-orange-50 rounded border border-orange-200">
               <div className="flex items-center gap-1">
@@ -810,28 +827,29 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                         <img
                           src={image.src}
                           alt={image.name}
-                          crossOrigin="anonymous"
+                          // 修复：移除 crossOrigin="anonymous"，iPad Safari 上可能导致加载失败
                           className="w-full h-full object-cover pointer-events-none"
                           draggable={false}
+                          loading="lazy"
                           onError={(e) => {
                             console.error(
                               "图片加载失败:",
                               image.id,
                               image.name,
+                              image.src,
                             );
                             const target = e.target as HTMLImageElement;
                             target.style.display = "none";
                             const parent = target.parentElement;
                             if (parent) {
-                              parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-xs text-gray-400">${
-                                image.name?.charAt(0) || "?"
-                              }</div>`;
+                              // 修复：显示完整名称而不是首字符，避免显示 "1"
+                              parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center leading-tight px-1 break-all">${image.name || "?"}</div>`;
                             }
                           }}
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
-                          {image.name?.charAt(0) || "?"}
+                        <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center leading-tight px-1 break-all">
+                          {image.name || "?"}
                         </div>
                       )}
                     </div>
