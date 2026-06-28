@@ -135,6 +135,8 @@ export const useStore = create<StoreState>()(
       // =============================
 
       isDragging: false,
+      gridSize: 40, // 添加这行
+      snapToGrid: true, // 添加这行
       history: [[]],
       historyIndex: 0,
       canUndo: false,
