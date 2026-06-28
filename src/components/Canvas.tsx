@@ -36,14 +36,14 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     removeCard,
     undo,
     redo,
-    canUndo,
-    canRedo,
     selectAll,
   } = useStore();
 
   // 框选状态
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
   const [isBoxSelecting, setIsBoxSelecting] = useState(false);
+  const isTouchBoxSelectingRef = useRef(false);
+  const touchBoxStartRef = useRef({ x: 0, y: 0 });
 
   const presetColors = [
     "#e8e8e8",
@@ -83,7 +83,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         const cardRight = cardLeft + cardWidth;
         const cardBottom = cardTop + cardHeight;
 
-        // 矩形相交检测
         if (
           cardLeft < box.right &&
           cardRight > box.left &&
@@ -98,24 +97,18 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     [placedCards],
   );
 
-  // 画布鼠标按下（开始框选或清空）
+  // ========== 鼠标事件 ==========
   const handleCanvasMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // 只响应左键
       if (e.button !== 0) return;
-
-      // 如果点击的是卡片，不处理（由 DraggableCard 处理）
       const target = e.target as HTMLElement;
       if (target.closest(".placed-card")) return;
 
       const point = getCanvasPoint(e.clientX, e.clientY);
-
-      // 如果没有按住 Ctrl/Cmd，清空选择
       if (!e.ctrlKey && !e.metaKey) {
         clearSelection();
       }
 
-      // 开始框选
       setSelectionBox({
         startX: point.x,
         startY: point.y,
@@ -127,19 +120,17 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     [getCanvasPoint, clearSelection],
   );
 
-  // 全局鼠标移动（框选）
+  // 鼠标框选
   useEffect(() => {
     if (!isBoxSelecting) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       const point = getCanvasPoint(e.clientX, e.clientY);
-
       setSelectionBox((prev) => {
         if (!prev) return null;
         return { ...prev, currentX: point.x, currentY: point.y };
       });
 
-      // 实时更新选中
       const box = {
         left: Math.min(selectionBox?.startX || 0, point.x),
         top: Math.min(selectionBox?.startY || 0, point.y),
@@ -148,7 +139,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       };
 
       const selected = getCardsInBox(box);
-      // 合并到现有选择中（如果按住 Ctrl）
       if (e.ctrlKey || e.metaKey) {
         const current = new Set(useStore.getState().selectedIds);
         selected.forEach((id) => current.add(id));
@@ -172,74 +162,109 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
   }, [isBoxSelecting, getCanvasPoint, getCardsInBox, selectionBox]);
 
-  // 触摸框选（iPad）
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
+  // ========== iPad 触摸框选（关键修复：使用原生 addEventListener + { passive: false }）==========
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let touchStartTime = 0;
+    let hasMoved = false;
+
+    const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
       const target = e.target as HTMLElement;
       if (target.closest(".placed-card")) return;
 
+      e.preventDefault(); // 关键：阻止默认行为
+
       const point = getCanvasPoint(touch.clientX, touch.clientY);
+      touchBoxStartRef.current = { x: point.x, y: point.y };
+      touchStartTime = Date.now();
+      hasMoved = false;
+      isTouchBoxSelectingRef.current = false;
 
-      setSelectionBox({
-        startX: point.x,
-        startY: point.y,
-        currentX: point.x,
-        currentY: point.y,
-      });
-      setIsBoxSelecting(true);
-    },
-    [getCanvasPoint],
-  );
+      // 清空选择（除非多选模式）
+      const store = useStore.getState();
+      if (store.selectedIds.size <= 1) {
+        clearSelection();
+      }
+    };
 
-  useEffect(() => {
-    if (!isBoxSelecting) return;
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault(); // 关键：阻止默认滚动
 
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
       const touch = e.touches[0];
       const point = getCanvasPoint(touch.clientX, touch.clientY);
+      const dx = point.x - touchBoxStartRef.current.x;
+      const dy = point.y - touchBoxStartRef.current.y;
 
-      setSelectionBox((prev) => {
-        if (!prev) return null;
+      // 移动超过 10px 开始框选
+      if (
+        !isTouchBoxSelectingRef.current &&
+        (Math.abs(dx) > 10 || Math.abs(dy) > 10)
+      ) {
+        isTouchBoxSelectingRef.current = true;
+        hasMoved = true;
+        setSelectionBox({
+          startX: touchBoxStartRef.current.x,
+          startY: touchBoxStartRef.current.y,
+          currentX: point.x,
+          currentY: point.y,
+        });
+        setIsBoxSelecting(true);
+      }
+
+      if (isTouchBoxSelectingRef.current) {
+        setSelectionBox((prev) => {
+          if (!prev) return null;
+          return { ...prev, currentX: point.x, currentY: point.y };
+        });
+
         const box = {
-          left: Math.min(prev.startX, point.x),
-          top: Math.min(prev.startY, point.y),
-          right: Math.max(prev.startX, point.x),
-          bottom: Math.max(prev.startY, point.y),
+          left: Math.min(touchBoxStartRef.current.x, point.x),
+          top: Math.min(touchBoxStartRef.current.y, point.y),
+          right: Math.max(touchBoxStartRef.current.x, point.x),
+          bottom: Math.max(touchBoxStartRef.current.y, point.y),
         };
 
         const selected = getCardsInBox(box);
         useStore.getState().setSelectedIds(selected);
-
-        return { ...prev, currentX: point.x, currentY: point.y };
-      });
+      }
     };
 
-    const handleTouchEnd = () => {
-      setIsBoxSelecting(false);
-      setSelectionBox(null);
+    const onTouchEnd = (e: TouchEvent) => {
+      if (isTouchBoxSelectingRef.current) {
+        setIsBoxSelecting(false);
+        setSelectionBox(null);
+        isTouchBoxSelectingRef.current = false;
+      } else if (!hasMoved && Date.now() - touchStartTime < 300) {
+        // 短按空白处——清空选择
+        clearSelection();
+      }
     };
 
-    document.addEventListener("touchmove", handleTouchMove, { passive: false });
-    document.addEventListener("touchend", handleTouchEnd);
+    // 关键：使用 { passive: false } 绑定原生事件
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", onTouchEnd, { passive: false });
 
     return () => {
-      document.removeEventListener("touchmove", handleTouchMove);
-      document.removeEventListener("touchend", handleTouchEnd);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
+      canvas.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [isBoxSelecting, getCanvasPoint, getCardsInBox]);
+  }, [getCanvasPoint, getCardsInBox, clearSelection]);
 
   // 键盘快捷键
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+A 全选
       if ((e.ctrlKey || e.metaKey) && e.key === "a") {
         e.preventDefault();
         selectAll();
       }
 
-      // Delete 删除选中的
       if (e.key === "Delete" || e.key === "Backspace") {
         const ids = Array.from(useStore.getState().selectedIds);
         if (ids.length > 0) {
@@ -248,23 +273,19 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         }
       }
 
-      // Ctrl+C 复制
       if ((e.ctrlKey || e.metaKey) && e.key === "c") {
         copy();
       }
 
-      // Ctrl+V 粘贴
       if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         paste();
       }
 
-      // Ctrl+Z 撤销
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
       }
 
-      // Ctrl+Shift+Z 或 Ctrl+Y 重做
       if (
         ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "z") ||
         ((e.ctrlKey || e.metaKey) && e.key === "y")
@@ -273,7 +294,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         redo();
       }
 
-      // Escape 清空选择
       if (e.key === "Escape") {
         clearSelection();
       }
@@ -310,7 +330,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         </div>
         <span className="text-xs text-gray-400 ml-2">{canvasColor}</span>
 
-        {/* 多选提示 */}
         {selectedIds.size > 0 && (
           <span className="ml-auto text-xs text-green-600 font-medium">
             已选 {selectedIds.size} 张
@@ -323,12 +342,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         ref={canvasRef}
         className="flex-1 relative overflow-hidden"
         onMouseDown={handleCanvasMouseDown}
-        onTouchStart={handleTouchStart}
+        // 不使用 onTouchStart JSX 属性，改用 useEffect + addEventListener
         style={{
           backgroundColor: canvasColor,
           touchAction: "none",
           userSelect: "none",
           WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
           cursor: isBoxSelecting ? "crosshair" : "default",
         }}
       >

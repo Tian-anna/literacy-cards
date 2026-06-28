@@ -21,10 +21,12 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
   } = useStore();
 
   const [isDragging, setIsDraggingLocal] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef({ x: 0, y: 0, cardX: 0, cardY: 0 });
   const initialPositionsRef = useRef<Map<string, { x: number; y: number }>>(
     new Map(),
   );
+  const isTouchDraggingRef = useRef(false);
 
   const image = images.find((img) => img.id === card.imageId);
   if (!image) {
@@ -34,33 +36,28 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
 
   const isSelected = selectedIds.has(card.instanceId);
 
-  // 开始拖拽（支持多卡一起拖拽）
+  // ========== 鼠标事件 ==========
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
 
-      // Ctrl/Cmd + 点击：切换选中状态
       if (e.ctrlKey || e.metaKey) {
         toggleSelect(card.instanceId);
         return;
       }
 
-      // Shift + 点击：范围选择
       if (e.shiftKey) {
         selectRange(card.instanceId);
         return;
       }
 
-      // 普通点击：如果当前卡片不在选中集合中，只选这一张
       if (!isSelected) {
         selectOne(card.instanceId);
       }
 
-      // 提升层级
       bringToFront(card.instanceId);
 
-      // 记录所有选中卡片的初始位置
       const store = useStore.getState();
       initialPositionsRef.current = new Map();
       store.placedCards.forEach((c) => {
@@ -69,7 +66,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
         }
       });
 
-      // 记录拖拽起始位置
       dragStartRef.current = {
         x: e.clientX,
         y: e.clientY,
@@ -93,7 +89,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     ],
   );
 
-  // 拖拽中（移动所有选中的卡片）
+  // 鼠标拖拽中
   useEffect(() => {
     if (!isDragging) return;
 
@@ -101,13 +97,10 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       const dx = e.clientX - dragStartRef.current.x;
       const dy = e.clientY - dragStartRef.current.y;
 
-      const store = useStore.getState();
-
       initialPositionsRef.current.forEach((pos, id) => {
         let newX = pos.x + dx;
         let newY = pos.y + dy;
 
-        // 网格吸附
         if (snapToGrid) {
           newX = Math.round(newX / gridSize) * gridSize;
           newY = Math.round(newY / gridSize) * gridSize;
@@ -132,27 +125,28 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     };
   }, [isDragging, snapToGrid, gridSize, updateCard, setIsDragging]);
 
-  // 触摸支持（iPad）
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
+  // ========== iPad 触摸事件（关键修复：使用原生 addEventListener + { passive: false }）==========
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let hasMoved = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault(); // 关键：阻止默认滚动行为
       e.stopPropagation();
+
       const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchStartTime = Date.now();
+      hasMoved = false;
+      isTouchDraggingRef.current = false;
 
-      // 如果已经在多选模式，切换选中
       const store = useStore.getState();
-      if (
-        store.selectedIds.size > 1 ||
-        (store.selectedIds.has(card.instanceId) && store.selectedIds.size === 1)
-      ) {
-        toggleSelect(card.instanceId);
-        return;
-      }
-
-      if (!isSelected) {
-        selectOne(card.instanceId);
-      }
-
-      bringToFront(card.instanceId);
 
       // 记录所有选中卡片的初始位置
       initialPositionsRef.current = new Map();
@@ -168,61 +162,109 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
         cardX: card.x,
         cardY: card.y,
       };
+    };
 
-      setIsDraggingLocal(true);
-      setIsDragging(true);
-    },
-    [
-      card.instanceId,
-      card.x,
-      card.y,
-      isSelected,
-      toggleSelect,
-      selectOne,
-      bringToFront,
-      setIsDragging,
-    ],
-  );
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault(); // 关键：阻止默认滚动
+      e.stopPropagation();
 
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
       const touch = e.touches[0];
       const dx = touch.clientX - dragStartRef.current.x;
       const dy = touch.clientY - dragStartRef.current.y;
 
-      initialPositionsRef.current.forEach((pos, id) => {
-        let newX = pos.x + dx;
-        let newY = pos.y + dy;
+      // 移动超过 5px 才开始拖拽
+      if (
+        !isTouchDraggingRef.current &&
+        (Math.abs(dx) > 5 || Math.abs(dy) > 5)
+      ) {
+        hasMoved = true;
+        isTouchDraggingRef.current = true;
+        setIsDraggingLocal(true);
+        setIsDragging(true);
 
-        if (snapToGrid) {
-          newX = Math.round(newX / gridSize) * gridSize;
-          newY = Math.round(newY / gridSize) * gridSize;
+        // 如果当前卡片不在选中集合中，只选这一张
+        const store = useStore.getState();
+        if (!store.selectedIds.has(card.instanceId)) {
+          selectOne(card.instanceId);
+          // 重新记录位置（只有当前卡片）
+          initialPositionsRef.current = new Map();
+          initialPositionsRef.current.set(card.instanceId, {
+            x: card.x,
+            y: card.y,
+          });
         }
 
-        updateCard(id, { x: newX, y: newY });
-      });
+        bringToFront(card.instanceId);
+      }
+
+      if (isTouchDraggingRef.current) {
+        initialPositionsRef.current.forEach((pos, id) => {
+          let newX = pos.x + dx;
+          let newY = pos.y + dy;
+
+          if (snapToGrid) {
+            newX = Math.round(newX / gridSize) * gridSize;
+            newY = Math.round(newY / gridSize) * gridSize;
+          }
+
+          updateCard(id, { x: newX, y: newY });
+        });
+      }
     };
 
-    const handleTouchEnd = () => {
-      setIsDraggingLocal(false);
-      setIsDragging(false);
-      useStore.getState().saveHistory();
+    const onTouchEnd = (e: TouchEvent) => {
+      const touchDuration = Date.now() - touchStartTime;
+
+      if (isTouchDraggingRef.current) {
+        // 拖拽结束
+        setIsDraggingLocal(false);
+        setIsDragging(false);
+        useStore.getState().saveHistory();
+      } else if (touchDuration < 300 && !hasMoved) {
+        // 短按（点击）—— 切换选中状态
+        e.preventDefault();
+        const store = useStore.getState();
+        if (
+          store.selectedIds.has(card.instanceId) &&
+          store.selectedIds.size === 1
+        ) {
+          selectOne(""); // 清空选择
+        } else {
+          selectOne(card.instanceId);
+        }
+      }
+
+      isTouchDraggingRef.current = false;
     };
 
-    document.addEventListener("touchmove", handleTouchMove, { passive: false });
-    document.addEventListener("touchend", handleTouchEnd);
+    // 关键：使用 { passive: false } 绑定原生事件
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: false });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: false });
 
     return () => {
-      document.removeEventListener("touchmove", handleTouchMove);
-      document.removeEventListener("touchend", handleTouchEnd);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [isDragging, snapToGrid, gridSize, updateCard, setIsDragging]);
+  }, [
+    card.instanceId,
+    card.x,
+    card.y,
+    selectOne,
+    toggleSelect,
+    bringToFront,
+    updateCard,
+    snapToGrid,
+    gridSize,
+    setIsDragging,
+  ]);
 
   return (
     <div
+      ref={cardRef}
       className="placed-card absolute select-none"
       style={{
         left: card.x,
@@ -239,9 +281,13 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
           : "0 2px 8px rgba(0,0,0,0.1)",
         transition: isDragging ? "none" : "box-shadow 0.2s",
         touchAction: "none",
+        WebkitTouchCallout: "none",
+        WebkitUserSelect: "none",
+        userSelect: "none",
       }}
       onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
+      // 注意：不使用 onTouchStart/onTouchMove/onTouchEnd JSX 属性
+      // 触摸事件通过 useEffect + addEventListener 绑定（设置 { passive: false }）
     >
       {/* 选中标记（多选时显示数量） */}
       {isSelected && selectedIds.size > 1 && (
@@ -255,6 +301,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
         alt={image.name}
         className="w-full h-full object-cover rounded-lg pointer-events-none"
         draggable={false}
+        style={{ pointerEvents: "none" }}
       />
 
       {/* 选中时显示操作按钮 */}
