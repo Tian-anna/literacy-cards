@@ -135,11 +135,6 @@ export const useStore = create<StoreState>()(
       // =============================
 
       isDragging: false,
-      setIsDragging: (dragging) => set({ isDragging: dragging }),
-      gridSize: 40,
-      setGridSize: (size) => set({ gridSize: size }),
-      snapToGrid: true,
-      setSnapToGrid: (snap) => set({ snapToGrid: snap }),
       history: [[]],
       historyIndex: 0,
       canUndo: false,
