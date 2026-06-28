@@ -56,16 +56,15 @@ const ImageLibrary: React.FC = () => {
   const [isCleaning, setIsCleaning] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // ========== 分类相关状态 ==========
+  // 分类相关状态
   const [activeCategory, setActiveCategory] = useState<string>("全部");
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
   // 批量修改分类
   const [batchCategoryTarget, setBatchCategoryTarget] = useState<string>("");
-  // =================================
 
-  // ========== GitHub 图片数量 ==========
+  // GitHub 图片数量
   const [githubCount, setGithubCount] = useState<number | null>(null);
   const [isLoadingGithubCount, setIsLoadingGithubCount] = useState(false);
 
@@ -99,7 +98,6 @@ const ImageLibrary: React.FC = () => {
       fetchGithubCount();
     }
   }, [isSyncing, fetchGithubCount]);
-  // =====================================
 
   const ITEMS_PER_PAGE = 40;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -146,7 +144,7 @@ const ImageLibrary: React.FC = () => {
     }
   };
 
-  // ========== 完全串行上传：一张一张传，避免 SHA 冲突 ==========
+  // 完全串行上传
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -256,7 +254,7 @@ const ImageLibrary: React.FC = () => {
     alert(messages.join("，") || "上传完成");
   };
 
-  // ========== 清理按钮：只清理本地 IndexedDB，绝不删除 GitHub ==========
+  // 清理按钮
   const handleCleanImages = async () => {
     if (
       !confirm(
@@ -278,7 +276,7 @@ const ImageLibrary: React.FC = () => {
     }
   };
 
-  // ========== 分类管理 ==========
+  // 分类管理
   const handleAddCategory = () => {
     const name = newCategoryName.trim();
     if (!name) return;
@@ -315,11 +313,9 @@ const ImageLibrary: React.FC = () => {
       updateImageCategory(id, batchCategoryTarget),
     );
     setSelectedImages(new Set());
-    setIsBatchMode(false);
     setBatchCategoryTarget("");
     alert("批量修改分类完成！");
   };
-  // =============================
 
   // 排序切换
   const handleSortChange = (field: SortField) => {
@@ -374,12 +370,11 @@ const ImageLibrary: React.FC = () => {
     );
   }, [sortedImages, searchTerm]);
 
-  // ========== 按分类过滤 ==========
+  // 按分类过滤
   const categoryFilteredImages = useMemo(() => {
     if (activeCategory === "全部") return filteredImages;
     return filteredImages.filter((img) => img.category === activeCategory);
   }, [filteredImages, activeCategory]);
-  // =============================
 
   // 分页
   const paginatedImages = useMemo(() => {
@@ -426,7 +421,7 @@ const ImageLibrary: React.FC = () => {
     }
   };
 
-  // ========== 拖拽调整宽度：同时支持鼠标和触摸 ==========
+  // 拖拽调整宽度
   const startResizing = useCallback((clientX: number) => {
     setIsResizing(true);
   }, []);
@@ -498,7 +493,7 @@ const ImageLibrary: React.FC = () => {
         minWidth: isExpanded ? "80px" : "40px",
       }}
     >
-      {/* 拖拽调整条 — 同时支持鼠标和触摸 */}
+      {/* 拖拽调整条 */}
       {isExpanded && (
         <div
           ref={resizeRef}
@@ -564,7 +559,7 @@ const ImageLibrary: React.FC = () => {
             </button>
           </div>
 
-          {/* ========== 分类筛选栏 ========== */}
+          {/* 分类筛选栏 */}
           <div className="mb-2">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-gray-500 font-medium">
@@ -641,7 +636,6 @@ const ImageLibrary: React.FC = () => {
               </div>
             )}
           </div>
-          {/* ============================== */}
 
           {/* 同步按钮 */}
           <div className="flex items-center gap-1 mb-2">
@@ -699,7 +693,7 @@ const ImageLibrary: React.FC = () => {
             </button>
           </div>
 
-          {/* 批量操作栏 */}
+          {/* 添加/多选按钮 */}
           <div className="flex items-center gap-1 mb-2">
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -718,6 +712,7 @@ const ImageLibrary: React.FC = () => {
               onClick={() => {
                 setIsBatchMode(!isBatchMode);
                 setSelectedImages(new Set());
+                setBatchCategoryTarget("");
               }}
               className={`px-2 py-1 rounded text-xs transition-colors ${
                 isBatchMode
@@ -744,9 +739,9 @@ const ImageLibrary: React.FC = () => {
             </button>
           </div>
 
-          {/* 批量模式操作按钮 */}
+          {/* 批量模式操作按钮 - 包含批量修改分类 */}
           {isBatchMode && (
-            <div className="flex flex-col gap-1 mb-2">
+            <div className="flex flex-col gap-1 mb-2 p-2 bg-orange-50 rounded border border-orange-200">
               <div className="flex items-center gap-1">
                 <button
                   onClick={selectAll}
@@ -769,13 +764,16 @@ const ImageLibrary: React.FC = () => {
                 </button>
               </div>
               {/* 批量修改分类 */}
-              <div className="flex items-center gap-1 mt-1">
+              <div className="flex items-center gap-1 mt-1 pt-1 border-t border-orange-200">
+                <span className="text-[10px] text-gray-500 whitespace-nowrap">
+                  移到:
+                </span>
                 <select
                   value={batchCategoryTarget}
                   onChange={(e) => setBatchCategoryTarget(e.target.value)}
-                  className="flex-1 px-1 py-1 border border-gray-300 rounded text-xs"
+                  className="flex-1 px-1 py-1 border border-gray-300 rounded text-xs bg-white"
                 >
-                  <option value="">选择目标分类...</option>
+                  <option value="">选择分类...</option>
                   {categories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
@@ -785,9 +783,9 @@ const ImageLibrary: React.FC = () => {
                 <button
                   onClick={handleBatchChangeCategory}
                   disabled={selectedImages.size === 0 || !batchCategoryTarget}
-                  className="px-2 py-1 bg-[#4CAF50] text-white rounded text-xs hover:bg-green-600 disabled:opacity-50"
+                  className="px-2 py-1 bg-[#4CAF50] text-white rounded text-xs hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
-                  移动
+                  移动({selectedImages.size})
                 </button>
               </div>
             </div>
@@ -802,7 +800,7 @@ const ImageLibrary: React.FC = () => {
             </div>
           ) : (
             <div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-3">
                 {paginatedImages.map((image) => {
                   const catStyle = getCategoryStyle(image.category);
                   return (
@@ -853,7 +851,7 @@ const ImageLibrary: React.FC = () => {
                         )}
                       </div>
 
-                      {/* ========== 分类标签（常驻显示，带颜色） ========== */}
+                      {/* 分类标签（常驻显示，带颜色） */}
                       <div className="absolute -bottom-2 left-0 right-0 flex justify-center z-10">
                         <span
                           className={`px-1.5 py-0 rounded-full text-[9px] cursor-pointer shadow-sm ${catStyle.bg} ${catStyle.text}`}
@@ -908,7 +906,6 @@ const ImageLibrary: React.FC = () => {
                           </button>
                         </div>
                       )}
-                      {/* ================================================ */}
 
                       {isBatchMode && (
                         <div
