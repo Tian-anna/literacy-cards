@@ -6,7 +6,7 @@ import { useStore } from "@/store/useStore";
 
 const App: React.FC = () => {
   // 侧边栏宽度状态，传给 ImageLibrary 和 Canvas
-  const [sidebarWidth, setSidebarWidth] = useState(200);
+  const [sidebarWidth, setSidebarWidth] = useState(240);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -61,7 +61,7 @@ const App: React.FC = () => {
     <div className="h-screen w-screen flex flex-col bg-[#e8e8e8] overflow-hidden select-none">
       <SceneManager />
       <div className="flex-1 flex overflow-hidden">
-        <ImageLibrary onWidthChange={setSidebarWidth} />
+        <ImageLibrary width={sidebarWidth} onWidthChange={setSidebarWidth} />
         <div className="flex-1 relative overflow-hidden">
           <Canvas sidebarWidth={sidebarWidth} />
         </div>

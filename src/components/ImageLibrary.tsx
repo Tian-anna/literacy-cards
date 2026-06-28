@@ -11,13 +11,17 @@ import { CardImage } from "@/types";
 interface ImageLibraryProps {
   onAddToCanvas?: (imageId: string) => void;
   onWidthChange?: (width: number) => void;
+  width?: number;
 }
 
 const ITEMS_PER_PAGE = 20;
+const MIN_WIDTH = 180;
+const MAX_WIDTH = 400;
 
 const ImageLibrary: React.FC<ImageLibraryProps> = ({
   onAddToCanvas,
   onWidthChange,
+  width = 240,
 }) => {
   const {
     images,
@@ -41,6 +45,8 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef<HTMLDivElement>(null);
+  const [isResizing, setIsResizing] = useState(false);
 
   const fetchGithubCount = useCallback(async () => {
     setIsLoadingGithubCount(true);
@@ -68,6 +74,29 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   useEffect(() => {
     fetchGithubCount();
   }, [fetchGithubCount]);
+
+  // 拖拽调整宽度
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, e.clientX));
+      onWidthChange?.(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing, onWidthChange]);
 
   const filteredImages = useMemo(() => {
     let result = [...images];
@@ -125,6 +154,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
 
       let addedCount = 0;
       for (const file of imageFiles) {
+        // 使用 file.download_url（已编码，包含 %20）
         const imageUrl = file.download_url;
 
         const exists = images.some(
@@ -200,7 +230,18 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-white border-r border-gray-200">
+    <div
+      className="h-full flex flex-col bg-white border-r border-gray-200 relative"
+      style={{ width }}
+    >
+      {/* 拖拽调整宽度的手柄 */}
+      <div
+        ref={resizeRef}
+        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize z-50 hover:bg-blue-300"
+        onMouseDown={() => setIsResizing(true)}
+        style={{ touchAction: "none" }}
+      />
+
       <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -431,7 +472,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       }`}
                       onClick={() => handleImageClick(image.id)}
                     >
-                      <div className="w-full h-full bg-gray-50">
+                      <div className="w-full h-full bg-gray-50 flex items-center justify-center">
                         {image.src ? (
                           <img
                             src={image.src}
