@@ -495,7 +495,7 @@ export const useStore = create<StoreState>()(
           await del(name);
         },
       })),
-      partialize: (state: StoreState) => ({
+      partialize: (state) => ({
         images: state.images,
         scenes: state.scenes,
         currentSceneId: state.currentSceneId,
@@ -504,7 +504,12 @@ export const useStore = create<StoreState>()(
         gridSize: state.gridSize,
         snapToGrid: state.snapToGrid,
         categories: state.categories,
+  // 不持久化 selectedIds，因为它会在加载时重置
       }),
+       // 添加这个：加载完成后重置 selectedIds
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+         state.selectedIds = new Set();
     },
   ),
 );
