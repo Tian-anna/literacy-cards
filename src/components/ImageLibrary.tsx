@@ -6,23 +6,27 @@ import React, {
   useMemo,
 } from "react";
 import { useStore } from "@/store/useStore";
-import { ImageItem } from "@/types";
+import { CardImage } from "@/types";
 
 interface ImageLibraryProps {
   onAddToCanvas?: (imageId: string) => void;
+  onWidthChange?: (width: number) => void;
 }
 
 const ITEMS_PER_PAGE = 20;
 
-const ImageLibrary: React.FC<ImageLibraryProps> = ({ onAddToCanvas }) => {
+const ImageLibrary: React.FC<ImageLibraryProps> = ({
+  onAddToCanvas,
+  onWidthChange,
+}) => {
   const {
     images,
     addImage,
     removeImage,
-    updateImage,
     categories,
     addCategory,
     removeCategory,
+    updateImageCategory,
   } = useStore();
   const [isExpanded, setIsExpanded] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -124,7 +128,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onAddToCanvas }) => {
         const imageUrl = file.download_url;
 
         const exists = images.some(
-          (img: ImageItem) =>
+          (img: CardImage) =>
             img.src === imageUrl ||
             img.name === file.name.replace(/\.[^/.]+$/, ""),
         );
@@ -175,7 +179,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onAddToCanvas }) => {
 
   const handleBatchSetCategory = (category: string) => {
     selectedImages.forEach((id) => {
-      updateImage(id, { category });
+      updateImageCategory(id, category);
     });
     setSelectedImages(new Set());
     setIsBatchMode(false);
