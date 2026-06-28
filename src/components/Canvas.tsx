@@ -62,7 +62,10 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    return { x: clientX - rect.left, y: clientY - rect.top };
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
   }, []);
 
   const getCardsInBox = useCallback(
@@ -98,7 +101,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       if (target.closest(".placed-card")) return;
 
       const point = getCanvasPoint(e.clientX, e.clientY);
-      if (!e.ctrlKey && !e.metaKey) clearSelection();
+      if (!e.ctrlKey && !e.metaKey) {
+        clearSelection();
+      }
 
       setSelectionBox({
         startX: point.x,
@@ -116,9 +121,10 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
     const handleMouseMove = (e: MouseEvent) => {
       const point = getCanvasPoint(e.clientX, e.clientY);
-      setSelectionBox((prev) =>
-        prev ? { ...prev, currentX: point.x, currentY: point.y } : null,
-      );
+      setSelectionBox((prev) => {
+        if (!prev) return null;
+        return { ...prev, currentX: point.x, currentY: point.y };
+      });
 
       const box = {
         left: Math.min(selectionBox?.startX || 0, point.x),
@@ -151,7 +157,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
   }, [isBoxSelecting, getCanvasPoint, getCardsInBox, selectionBox]);
 
-  // ========== iPad 触摸框选（修复：只在画布区域内处理，不阻止图库滚动）==========
+  // ========== iPad 触摸框选 ==========
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -160,11 +166,12 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     let hasMoved = false;
 
     const onTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
       const target = e.target as HTMLElement;
       if (target.closest(".placed-card")) return;
+
       if (!canvas.contains(target)) return;
 
-      const touch = e.touches[0];
       const point = getCanvasPoint(touch.clientX, touch.clientY);
       touchBoxStartRef.current = { x: point.x, y: point.y };
       touchStartTime = Date.now();
@@ -172,7 +179,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       isTouchBoxSelectingRef.current = false;
 
       const store = useStore.getState();
-      if (store.selectedIds.size <= 1) clearSelection();
+      if (store.selectedIds.size <= 1) {
+        clearSelection();
+      }
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -200,10 +209,12 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       }
 
       if (isTouchBoxSelectingRef.current) {
-        e.preventDefault(); // 只在框选时阻止默认行为
-        setSelectionBox((prev) =>
-          prev ? { ...prev, currentX: point.x, currentY: point.y } : null,
-        );
+        e.preventDefault();
+
+        setSelectionBox((prev) => {
+          if (!prev) return null;
+          return { ...prev, currentX: point.x, currentY: point.y };
+        });
 
         const box = {
           left: Math.min(touchBoxStartRef.current.x, point.x),
@@ -217,7 +228,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       }
     };
 
-    const onTouchEnd = (e: TouchEvent) => {
+    const onTouchEnd = () => {
       if (isTouchBoxSelectingRef.current) {
         setIsBoxSelecting(false);
         setSelectionBox(null);
@@ -227,7 +238,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       }
     };
 
-    // 关键：绑定到 canvas 元素，默认 passive: true，不阻止滚动
     canvas.addEventListener("touchstart", onTouchStart, { passive: true });
     canvas.addEventListener("touchmove", onTouchMove, { passive: true });
     canvas.addEventListener("touchend", onTouchEnd, { passive: true });
@@ -248,6 +258,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         e.preventDefault();
         selectAll();
       }
+
       if (e.key === "Delete" || e.key === "Backspace") {
         const ids = Array.from(useStore.getState().selectedIds);
         if (ids.length > 0) {
@@ -255,12 +266,20 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           clearSelection();
         }
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === "c") copy();
-      if ((e.ctrlKey || e.metaKey) && e.key === "v") paste();
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+        copy();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+        paste();
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
       }
+
       if (
         ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "z") ||
         ((e.ctrlKey || e.metaKey) && e.key === "y")
@@ -268,7 +287,10 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         e.preventDefault();
         redo();
       }
-      if (e.key === "Escape") clearSelection();
+
+      if (e.key === "Escape") {
+        clearSelection();
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -286,7 +308,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
   return (
     <div className="w-full h-full flex flex-col relative">
-      {/* 颜色工具栏 */}
       <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-white/80 backdrop-blur border-b border-gray-200 z-10">
         <span className="text-xs text-gray-500">画布颜色:</span>
         <div className="flex items-center gap-1">
@@ -300,6 +321,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           ))}
         </div>
         <span className="text-xs text-gray-400 ml-2">{canvasColor}</span>
+
         {selectedIds.size > 0 && (
           <span className="ml-auto text-xs text-green-600 font-medium">
             已选 {selectedIds.size} 张
@@ -307,7 +329,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         )}
       </div>
 
-      {/* 画布区域 */}
       <div
         ref={canvasRef}
         className="flex-1 relative overflow-hidden"

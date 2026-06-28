@@ -45,18 +45,14 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     current: 0,
     total: 0,
   });
-  const [isLoading, setIsLoading] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 分类相关状态
   const [activeCategory, setActiveCategory] = useState<string>("全部");
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
-  // 批量修改分类
   const [batchCategoryTarget, setBatchCategoryTarget] = useState<string>("");
 
-  // GitHub 图片数量
   const [githubCount, setGithubCount] = useState<number | null>(null);
   const [isLoadingGithubCount, setIsLoadingGithubCount] = useState(false);
 
@@ -70,7 +66,10 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
 
       const files = await res.json();
       const imageFiles = files.filter(
-        (file: any) => file.name !== ".gitkeep" && file.type === "file",
+        (file: any) =>
+          file.type === "file" &&
+          file.name !== ".gitkeep" &&
+          /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name),
       );
       setGithubCount(imageFiles.length);
     } catch (error) {
@@ -96,7 +95,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
   const resizeRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // 手动同步 GitHub 图片（修复：使用 GitHub Pages 链接）
+  // 手动同步 GitHub 图片
   const handleSyncFromGitHub = async () => {
     if (images.length > 0) {
       if (!confirm("本地已有图片，同步可能导致重复。是否继续？")) return;
@@ -110,17 +109,20 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
       if (!res.ok) throw new Error("加载失败");
 
       const files = await res.json();
-      const imageFiles = files.filter((file: any) => file.name !== ".gitkeep");
+      const imageFiles = files.filter(
+        (file: any) =>
+          file.type === "file" &&
+          file.name !== ".gitkeep" &&
+          /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name),
+      );
 
       let addedCount = 0;
       for (const file of imageFiles) {
-        // 修复：使用 GitHub Pages 链接代替 raw 链接，避免中文/特殊字符 400 错误
-        const imageUrl = `https://tian-anna.github.io/literacy-cards/images/${encodeURIComponent(file.name)}`;
+        const imageUrl = file.download_url;
 
         const exists = images.some(
           (img: any) =>
             img.src === imageUrl ||
-            img.src === file.download_url ||
             img.name === file.name.replace(/\.[^/.]+$/, ""),
         );
         if (!exists) {
@@ -144,7 +146,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     }
   };
 
-  // 完全串行上传
+  // 文件上传
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -206,8 +208,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
         const imageUrl = await uploadImageToGitHub(file);
 
         const img = new Image();
-        img.crossOrigin = "anonymous";
-
         await new Promise<void>((resolve) => {
           img.onload = () => resolve();
           img.onerror = () => {
@@ -295,7 +295,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     if (activeCategory === category) setActiveCategory("全部");
   };
 
-  // 批量修改分类
   const handleBatchChangeCategory = () => {
     if (selectedImages.size === 0 || !batchCategoryTarget) return;
     if (
@@ -312,7 +311,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     alert("批量修改分类完成！");
   };
 
-  // 排序切换
   const handleSortChange = (field: SortField) => {
     setPage(1);
     setSelectedImages(new Set());
@@ -325,53 +323,38 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     }
   };
 
-  // 排序后的图片
   const sortedImages = useMemo(() => {
     if (images.length === 0) return [];
-
     const sorted = [...images];
-
     try {
       sorted.sort((a, b) => {
         let comparison = 0;
-
         if (sortField === "name") {
-          const nameA = (a.name || "").toString();
-          const nameB = (b.name || "").toString();
-          comparison = nameA.localeCompare(nameB, "zh-CN");
+          comparison = (a.name || "").localeCompare(b.name || "", "zh-CN");
         } else if (sortField === "createdAt") {
-          const timeA = a.createdAt || 0;
-          const timeB = b.createdAt || 0;
-          comparison = timeA - timeB;
+          comparison = (a.createdAt || 0) - (b.createdAt || 0);
         }
-
         return sortOrder === "asc" ? comparison : -comparison;
       });
     } catch (err) {
       console.error("排序出错:", err);
-      return images;
     }
-
     return sorted;
   }, [images, sortField, sortOrder]);
 
-  // 搜索过滤
   const filteredImages = useMemo(() => {
     if (!searchTerm.trim()) return sortedImages;
-
     const term = searchTerm.toLowerCase();
     return sortedImages.filter((img) =>
       (img.name || "").toLowerCase().includes(term),
     );
   }, [sortedImages, searchTerm]);
 
-  // 按分类过滤
   const categoryFilteredImages = useMemo(() => {
     if (activeCategory === "全部") return filteredImages;
     return filteredImages.filter((img) => img.category === activeCategory);
   }, [filteredImages, activeCategory]);
 
-  // 分页
   const paginatedImages = useMemo(() => {
     return categoryFilteredImages.slice(0, page * ITEMS_PER_PAGE);
   }, [categoryFilteredImages, page]);
@@ -379,15 +362,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
   const hasMore = paginatedImages.length < categoryFilteredImages.length;
   const totalCount = categoryFilteredImages.length;
 
-  // 批量选择
   const toggleSelect = (id: string) => {
     setSelectedImages((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -416,7 +395,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     }
   };
 
-  // 拖拽调整宽度
   const startResizing = useCallback((clientX: number) => {
     setIsResizing(true);
   }, []);
@@ -472,7 +450,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
     };
   }, [isResizing, onWidthChange]);
 
-  // 统计各分类数量
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     categories.forEach((cat) => {
@@ -490,7 +467,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
         minWidth: isExpanded ? "80px" : "40px",
       }}
     >
-      {/* 拖拽调整条 */}
       {isExpanded && (
         <div
           ref={resizeRef}
@@ -511,7 +487,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
         />
       )}
 
-      {/* 图库头部 */}
       <div className="flex items-center justify-between px-2 py-2 bg-gray-50">
         <div
           className="flex items-center gap-1 cursor-pointer hover:bg-gray-100 rounded px-1 py-1"
@@ -529,17 +504,15 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
         </div>
       </div>
 
-      {/* 图库内容 - 修复：添加 -webkit-overflow-scrolling: touch 支持 iPad 滚动 */}
       {isExpanded && (
         <div
           ref={scrollContainerRef}
           className="flex-1 overflow-y-auto p-2"
           style={{
-            WebkitOverflowScrolling: "touch", // 关键：iPad Safari 平滑滚动
-            overscrollBehavior: "contain", // 防止滚动链传播到父元素
+            WebkitOverflowScrolling: "touch",
+            overscrollBehavior: "contain",
           }}
         >
-          {/* GitHub 图片数量 */}
           <div className="flex items-center justify-between mb-2 px-1">
             <span className="text-xs text-gray-500">
               GitHub:
@@ -563,7 +536,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             </button>
           </div>
 
-          {/* 分类筛选栏 */}
           <div className="mb-2">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-gray-500 font-medium">
@@ -576,8 +548,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                 {isManagingCategories ? "完成" : "管理"}
               </button>
             </div>
-
-            {/* 分类标签 */}
             <div className="flex flex-wrap gap-1">
               {["全部", ...categories].map((cat) => (
                 <button
@@ -599,8 +569,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                 </button>
               ))}
             </div>
-
-            {/* 分类管理面板 */}
             {isManagingCategories && (
               <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
                 <div className="flex items-center gap-1 mb-2">
@@ -641,7 +609,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             )}
           </div>
 
-          {/* 同步按钮 */}
           <div className="flex items-center gap-1 mb-2">
             <button
               onClick={handleSyncFromGitHub}
@@ -656,7 +623,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             </button>
           </div>
 
-          {/* 搜索框 */}
           <div className="mb-2">
             <input
               type="text"
@@ -671,7 +637,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             />
           </div>
 
-          {/* 排序按钮 */}
           <div className="flex items-center gap-1 mb-2">
             <button
               onClick={() => handleSortChange("name")}
@@ -681,8 +646,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                   : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
             >
-              名称
-              {sortField === "name" && (sortOrder === "asc" ? " ▲" : " ▼")}
+              名称{sortField === "name" && (sortOrder === "asc" ? " ▲" : " ▼")}
             </button>
             <button
               onClick={() => handleSortChange("createdAt")}
@@ -697,7 +661,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             </button>
           </div>
 
-          {/* 添加/多选按钮 */}
           <div className="flex items-center gap-1 mb-2">
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -728,7 +691,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             </button>
           </div>
 
-          {/* 清理按钮 */}
           <div className="flex items-center gap-1 mb-2">
             <button
               onClick={handleCleanImages}
@@ -743,7 +705,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             </button>
           </div>
 
-          {/* 批量模式操作按钮 */}
           {isBatchMode && (
             <div className="flex flex-col gap-1 mb-2 p-2 bg-orange-50 rounded border border-orange-200">
               <div className="flex items-center gap-1">
@@ -762,12 +723,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                 <button
                   onClick={handleBatchDelete}
                   disabled={selectedImages.size === 0}
-                  className="flex-1 bg-red-500 text-white py-1 rounded text-xs hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-red-500 text-white py-1 rounded text-xs hover:bg-red-600 disabled:opacity-50"
                 >
                   删除({selectedImages.size})
                 </button>
               </div>
-              {/* 批量修改分类 */}
               <div className="flex items-center gap-1 mt-1 pt-1 border-t border-orange-200">
                 <span className="text-[10px] text-gray-500 whitespace-nowrap">
                   移到:
@@ -787,7 +747,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                 <button
                   onClick={handleBatchChangeCategory}
                   disabled={selectedImages.size === 0 || !batchCategoryTarget}
-                  className="px-2 py-1 bg-[#4CAF50] text-white rounded text-xs hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  className="px-2 py-1 bg-[#4CAF50] text-white rounded text-xs hover:bg-green-600 disabled:opacity-50 whitespace-nowrap"
                 >
                   移动({selectedImages.size})
                 </button>
@@ -795,7 +755,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
             </div>
           )}
 
-          {/* 图片列表 */}
           {totalCount === 0 ? (
             <div className="text-center text-gray-400 py-4">
               <p className="text-xs">
@@ -827,7 +786,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                         <img
                           src={image.src}
                           alt={image.name}
-                          // 修复：移除 crossOrigin="anonymous"，iPad Safari 上可能导致加载失败
                           className="w-full h-full object-cover pointer-events-none"
                           draggable={false}
                           loading="lazy"
@@ -842,7 +800,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                             target.style.display = "none";
                             const parent = target.parentElement;
                             if (parent) {
-                              // 修复：显示完整名称而不是首字符，避免显示 "1"
                               parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center leading-tight px-1 break-all">${image.name || "?"}</div>`;
                             }
                           }}
@@ -853,8 +810,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                         </div>
                       )}
                     </div>
-
-                    {/* 批量选择标记 */}
                     {isBatchMode && (
                       <div
                         className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-xs ${
@@ -866,16 +821,13 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                         {selectedImages.has(image.id) ? "✓" : ""}
                       </div>
                     )}
-
-                    {/* 删除按钮 */}
                     {!isBatchMode && (
                       <button
                         className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`删除"${image.name}"?`)) {
+                          if (confirm(`删除"${image.name}"?`))
                             removeImage(image.id);
-                          }
                         }}
                       >
                         ×
@@ -884,7 +836,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({ onWidthChange }) => {
                   </div>
                 ))}
               </div>
-
               {hasMore && (
                 <div className="flex justify-center mt-2">
                   <button

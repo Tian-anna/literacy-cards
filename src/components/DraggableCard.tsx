@@ -21,13 +21,13 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
   } = useStore();
 
   const [isDragging, setIsDraggingLocal] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(true);
   const cardRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef({ x: 0, y: 0, cardX: 0, cardY: 0 });
   const initialPositionsRef = useRef<Map<string, { x: number; y: number }>>(
     new Map(),
   );
   const isTouchDraggingRef = useRef(false);
-  const [imageLoaded, setImageLoaded] = useState(true);
 
   const image = images.find((img) => img.id === card.imageId);
   if (!image) {
@@ -126,7 +126,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     };
   }, [isDragging, snapToGrid, gridSize, updateCard, setIsDragging]);
 
-  // ========== iPad 触摸事件（修复：使用原生 addEventListener + { passive: false }）==========
+  // ========== iPad 触摸事件 ==========
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -148,7 +148,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       isTouchDraggingRef.current = false;
 
       const store = useStore.getState();
-
       initialPositionsRef.current = new Map();
       store.placedCards.forEach((c) => {
         if (store.selectedIds.has(c.instanceId)) {
@@ -248,7 +247,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     card.x,
     card.y,
     selectOne,
-    toggleSelect,
     bringToFront,
     updateCard,
     snapToGrid,
@@ -281,21 +279,18 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       }}
       onMouseDown={handleMouseDown}
     >
-      {/* 选中标记（多选时显示数量） */}
       {isSelected && selectedIds.size > 1 && (
         <div className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-xs z-10">
           {selectedIds.size}
         </div>
       )}
 
-      {/* 修复：移除 crossOrigin="anonymous"，添加 onError 处理 */}
       {imageLoaded ? (
         <img
           src={image.src}
           alt={image.name}
           className="w-full h-full object-cover rounded-lg pointer-events-none"
           draggable={false}
-          style={{ pointerEvents: "none" }}
           onError={() => {
             console.error("画布图片加载失败:", image.src);
             setImageLoaded(false);
@@ -307,7 +302,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
         </div>
       )}
 
-      {/* 选中时显示操作按钮 */}
       {isSelected && (
         <div className="absolute -top-8 left-1/2 -translate-x-1/2 flex gap-1">
           <button

@@ -1,513 +1,511 @@
-import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
-import { CardImage, Scene, PlacedCard } from "@/types";
-import { v4 as uuidv4 } from "uuid";
-import { get, set, del } from "idb-keyval";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useStore } from "@/store/useStore";
+import { ImageItem } from "@/types";
 
-interface StoreState {
-  images: CardImage[];
-  addImage: (image: Omit<CardImage, "id" | "createdAt">) => void;
-  removeImage: (id: string) => void;
-
-  scenes: Scene[];
-  currentSceneId: string | null;
-  createScene: (name: string) => string;
-  loadScene: (id: string) => void;
-  deleteScene: (id: string) => void;
-  updateScene: (id: string, updates: Partial<Scene>) => void;
-
-  placedCards: PlacedCard[];
-  addCardToScene: (imageId: string, x?: number, y?: number) => void;
-  updateCard: (instanceId: string, updates: Partial<PlacedCard>) => void;
-  removeCard: (instanceId: string) => void;
-  bringToFront: (instanceId: string) => void;
-
-  // ========== 多选状态 ==========
-  selectedIds: Set<string>;
-  setSelectedIds: (ids: Set<string>) => void;
-  toggleSelect: (id: string) => void;
-  selectOne: (id: string) => void;
-  selectRange: (id: string) => void;
-  clearSelection: () => void;
-  selectAll: () => void;
-  // =============================
-
-  isDragging: boolean;
-  setIsDragging: (dragging: boolean) => void;
-
-  gridSize: number;
-  setGridSize: (size: number) => void;
-  snapToGrid: boolean;
-  setSnapToGrid: (snap: boolean) => void;
-
-  history: PlacedCard[][];
-  historyIndex: number;
-  canUndo: boolean;
-  canRedo: boolean;
-  undo: () => void;
-  redo: () => void;
-  saveHistory: () => void;
-
-  clipboard: PlacedCard[];
-  copy: () => void;
-  paste: () => void;
-
-  showGrid: boolean;
-  setShowGrid: (show: boolean) => void;
-  clearCanvas: () => void;
-
-  canvasColor: string;
-  setCanvasColor: (color: string) => void;
-
-  exportScene: () => string;
-  importScene: (json: string) => void;
-
-  categories: string[];
-  addCategory: (category: string) => void;
-  removeCategory: (category: string) => void;
-  updateImageCategory: (id: string, category: string) => void;
-
-  cleanInvalidImages: () => Promise<void>;
-  cleanDuplicateImages: () => void;
+interface ImageLibraryProps {
+  onAddToCanvas?: (imageId: string) => void;
 }
 
-export const useStore = create<StoreState>()(
-  persist(
-    (set, get) => ({
-      images: [],
-      scenes: [],
-      currentSceneId: null,
-      placedCards: [],
+const ITEMS_PER_PAGE = 20;
 
-      // ========== 多选状态 ==========
-      selectedIds: new Set<string>(),
-      setSelectedIds: (ids) => set({ selectedIds: new Set(ids) }),
+const ImageLibrary: React.FC<ImageLibraryProps> = ({ onAddToCanvas }) => {
+  const { images, addImage, removeImage, updateImage, categories, addCategory, removeCategory, renameCategory } = useStore();
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("全部");
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<"name" | "date">("name");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [githubCount, setGithubCount] = useState<number | null>(null);
+  const [isLoadingGithubCount, setIsLoadingGithubCount] = useState(false);
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
+  const [isManagingCategories, setIsManagingCategories] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-      toggleSelect: (id) =>
-        set((state) => {
-          const newSet = new Set(state.selectedIds);
-          if (newSet.has(id)) {
-            newSet.delete(id);
-          } else {
-            newSet.add(id);
-          }
-          return { selectedIds: newSet };
-        }),
+  // 获取 GitHub 图片数量
+  const fetchGithubCount = useCallback(async () => {
+    setIsLoadingGithubCount(true);
+    try {
+      const res = await fetch(
+        "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
+      );
+      if (!res.ok) throw new Error("获取失败");
+      const files = await res.json();
+      const imageFiles = files.filter(
+        (file: any) =>
+          file.type === "file" &&
+          file.name !== ".gitkeep" &&
+          /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name),
+      );
+      setGithubCount(imageFiles.length);
+    } catch (error) {
+      console.error("获取 GitHub 图片数量失败:", error);
+      setGithubCount(null);
+    } finally {
+      setIsLoadingGithubCount(false);
+    }
+  }, []);
 
-      selectOne: (id) => set({ selectedIds: new Set([id]) }),
+  useEffect(() => {
+    fetchGithubCount();
+  }, [fetchGithubCount]);
 
-      selectRange: (id) =>
-        set((state) => {
-          const cards = state.placedCards;
-          if (cards.length === 0) return state;
+  // 过滤和排序
+  const filteredImages = useMemo(() => {
+    let result = [...images];
 
-          const selectedArray = Array.from(state.selectedIds);
-          let anchorId = selectedArray[selectedArray.length - 1];
+    if (selectedCategory !== "全部") {
+      result = result.filter((img) => img.category === selectedCategory);
+    }
 
-          if (!anchorId) {
-            return { selectedIds: new Set([id]) };
-          }
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (img) =>
+          img.name.toLowerCase().includes(term) ||
+          (img.category && img.category.toLowerCase().includes(term)),
+      );
+    }
 
-          const anchorIndex = cards.findIndex((c) => c.instanceId === anchorId);
-          const targetIndex = cards.findIndex((c) => c.instanceId === id);
+    if (sortBy === "name") {
+      result.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+    } else {
+      result.sort((a, b) => (b.id > a.id ? 1 : -1));
+    }
 
-          if (anchorIndex === -1 || targetIndex === -1) {
-            return { selectedIds: new Set([id]) };
-          }
+    return result;
+  }, [images, selectedCategory, searchTerm, sortBy]);
 
-          const start = Math.min(anchorIndex, targetIndex);
-          const end = Math.max(anchorIndex, targetIndex);
+  const totalCount = filteredImages.length;
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const paginatedImages = filteredImages.slice(
+    (page - 1) * ITEMS_PER_PAGE,
+    page * ITEMS_PER_PAGE,
+  );
+  const hasMore = page < totalPages;
 
-          const newSet = new Set(state.selectedIds);
-          for (let i = start; i <= end; i++) {
-            newSet.add(cards[i].instanceId);
-          }
+  // 同步 GitHub
+  const handleSyncFromGitHub = async () => {
+    if (images.length > 0) {
+      if (!confirm("本地已有图片，同步可能导致重复。是否继续？")) return;
+    }
 
-          return { selectedIds: newSet };
-        }),
+    setIsSyncing(true);
+    try {
+      const res = await fetch(
+        "https://api.github.com/repos/Tian-anna/literacy-cards/contents/images",
+      );
+      if (!res.ok) throw new Error("加载失败");
 
-      clearSelection: () => set({ selectedIds: new Set() }),
+      const files = await res.json();
 
-      selectAll: () =>
-        set((state) => ({
-          selectedIds: new Set(state.placedCards.map((c) => c.instanceId)),
-        })),
-      // =============================
+      const imageFiles = files.filter(
+        (file: any) =>
+          file.type === "file" &&
+          file.name !== ".gitkeep" &&
+          /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name),
+      );
 
-      isDragging: false,
-      gridSize: 40, // 添加这行
-      snapToGrid: true, // 添加这行
-      history: [[]],
-      historyIndex: 0,
-      canUndo: false,
-      canRedo: false,
-      clipboard: [],
-      showGrid: true,
-      setShowGrid: (show) => set({ showGrid: show }),
-      canvasColor: "#e8e8e8",
-      setCanvasColor: (color) => set({ canvasColor: color }),
-      clearCanvas: () => {
-        set({ placedCards: [], selectedIds: new Set() });
-        get().saveHistory();
-      },
+      let addedCount = 0;
+      for (const file of imageFiles) {
+        const imageUrl = file.download_url;
 
-      categories: ["中文", "英文", "未分类"],
-
-      addCategory: (category) =>
-        set((state) => {
-          if (state.categories.includes(category)) return state;
-          return { categories: [...state.categories, category] };
-        }),
-
-      removeCategory: (category) =>
-        set((state) => ({
-          categories: state.categories.filter((c) => c !== category),
-          images: state.images.map((img) =>
-            img.category === category ? { ...img, category: "未分类" } : img,
-          ),
-        })),
-
-      updateImageCategory: (id, category) =>
-        set((state) => ({
-          images: state.images.map((img) =>
-            img.id === id ? { ...img, category } : img,
-          ),
-        })),
-
-      addImage: (image) => {
-        set((state) => {
-          const exists = state.images.some(
-            (img) => img.src === image.src || img.name === image.name,
-          );
-          if (exists) {
-            console.log("图片已存在，跳过:", image.name);
-            return state;
-          }
-          return {
-            images: [
-              ...state.images,
-              {
-                ...image,
-                id: crypto.randomUUID(),
-                createdAt: Date.now(),
-                category: image.category || "未分类",
-              },
-            ],
-          };
-        });
-      },
-
-      removeImage: (id) =>
-        set((state) => ({
-          images: state.images.filter((img) => img.id !== id),
-          placedCards: state.placedCards.filter((card) => card.imageId !== id),
-        })),
-
-      createScene: (name) => {
-        const id = uuidv4();
-        const newScene: Scene = {
-          id,
-          name,
-          cards: [],
-          backgroundColor: "#F3F4F6",
-          gridSize: 40,
-          snapToGrid: true,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        set((state) => ({
-          scenes: [...state.scenes, newScene],
-          currentSceneId: id,
-          placedCards: [],
-          history: [[]],
-          historyIndex: 0,
-          selectedIds: new Set(),
-        }));
-        return id;
-      },
-
-      loadScene: (id) => {
-        const scene = get().scenes.find((s) => s.id === id);
-        if (scene) {
-          set({
-            currentSceneId: id,
-            placedCards: scene.cards,
-            gridSize: scene.gridSize,
-            snapToGrid: scene.snapToGrid,
-            history: [scene.cards],
-            historyIndex: 0,
-            selectedIds: new Set(),
-          });
-        }
-      },
-
-      deleteScene: (id) =>
-        set((state) => ({
-          scenes: state.scenes.filter((s) => s.id !== id),
-          currentSceneId:
-            state.currentSceneId === id ? null : state.currentSceneId,
-        })),
-
-      updateScene: (id, updates) =>
-        set((state) => ({
-          scenes: state.scenes.map((s) =>
-            s.id === id ? { ...s, ...updates, updatedAt: Date.now() } : s,
-          ),
-        })),
-
-      addCardToScene: (imageId, x = 100, y = 100) => {
-        let sceneId = get().currentSceneId;
-        if (!sceneId) {
-          sceneId = get().createScene("默认场景");
-        }
-        const currentState = get();
-        const maxZ = Math.max(
-          0,
-          ...currentState.placedCards.map((c) => c.zIndex),
+        const exists = images.some(
+          (img: ImageItem) =>
+            img.src === imageUrl ||
+            img.name === file.name.replace(/\.[^/.]+$/, ""),
         );
-        const newCard: PlacedCard = {
-          instanceId: uuidv4(),
-          imageId,
-          x: x + Math.random() * 20,
-          y: y + Math.random() * 20,
-          rotation: 0,
-          scale: 1,
-          zIndex: maxZ + 1,
-        };
-        set((prevState) => ({
-          placedCards: [...prevState.placedCards, newCard],
-          selectedIds: new Set([newCard.instanceId]),
-        }));
-        get().saveHistory();
-      },
-
-      updateCard: (instanceId, updates) => {
-        set((state) => ({
-          placedCards: state.placedCards.map((card) =>
-            card.instanceId === instanceId ? { ...card, ...updates } : card,
-          ),
-        }));
-      },
-
-      removeCard: (instanceId) => {
-        set((state) => ({
-          placedCards: state.placedCards.filter(
-            (c) => c.instanceId !== instanceId,
-          ),
-          selectedIds: (() => {
-            const newSet = new Set(state.selectedIds);
-            newSet.delete(instanceId);
-            return newSet;
-          })(),
-        }));
-        get().saveHistory();
-      },
-
-      bringToFront: (instanceId) => {
-        const maxZ = Math.max(0, ...get().placedCards.map((c) => c.zIndex));
-        get().updateCard(instanceId, { zIndex: maxZ + 1 });
-      },
-
-      setIsDragging: (dragging) => set({ isDragging: dragging }),
-      setGridSize: (size) => set({ gridSize: size }),
-      setSnapToGrid: (snap) => set({ snapToGrid: snap }),
-
-      saveHistory: () =>
-        set((state) => {
-          const newHistory = state.history.slice(0, state.historyIndex + 1);
-          newHistory.push([...state.placedCards]);
-          return {
-            history: newHistory.slice(-50),
-            historyIndex: newHistory.length - 1,
-            canUndo: newHistory.length > 1,
-            canRedo: false,
-          };
-        }),
-
-      undo: () =>
-        set((state) => {
-          if (state.historyIndex <= 0) return state;
-          const newIndex = state.historyIndex - 1;
-          return {
-            placedCards: [...state.history[newIndex]],
-            historyIndex: newIndex,
-            canUndo: newIndex > 0,
-            canRedo: true,
-            selectedIds: new Set(),
-          };
-        }),
-
-      redo: () =>
-        set((state) => {
-          if (state.historyIndex >= state.history.length - 1) return state;
-          const newIndex = state.historyIndex + 1;
-          return {
-            placedCards: [...state.history[newIndex]],
-            historyIndex: newIndex,
-            canUndo: true,
-            canRedo: newIndex < state.history.length - 1,
-            selectedIds: new Set(),
-          };
-        }),
-
-      copy: () =>
-        set((state) => ({
-          clipboard: state.placedCards.filter((c) =>
-            state.selectedIds.has(c.instanceId),
-          ),
-        })),
-
-      paste: () =>
-        set((state) => {
-          if (state.clipboard.length === 0) return state;
-          const maxZ = Math.max(0, ...state.placedCards.map((c) => c.zIndex));
-          const newCards = state.clipboard.map((card, idx) => ({
-            ...card,
-            instanceId: uuidv4(),
-            x: card.x + 30,
-            y: card.y + 30,
-            zIndex: maxZ + idx + 1,
-          }));
-          return {
-            placedCards: [...state.placedCards, ...newCards],
-            selectedIds: new Set(newCards.map((c) => c.instanceId)),
-          };
-        }),
-
-      exportScene: () => {
-        const state = get();
-        const scene = state.scenes.find((s) => s.id === state.currentSceneId);
-        if (!scene) return "";
-        return JSON.stringify(
-          {
-            ...scene,
-            cards: state.placedCards,
-            exportedAt: Date.now(),
-          },
-          null,
-          2,
-        );
-      },
-
-      importScene: (json) => {
-        try {
-          const data = JSON.parse(json);
-          const id = uuidv4();
-          const newScene: Scene = {
-            id,
-            name: data.name + " (导入)",
-            cards: data.cards || [],
-            backgroundColor: data.backgroundColor || "#F3F4F6",
-            gridSize: data.gridSize || 40,
-            snapToGrid: data.snapToGrid ?? true,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-          set((state) => ({
-            scenes: [...state.scenes, newScene],
-            currentSceneId: id,
-            placedCards: newScene.cards,
-            selectedIds: new Set(),
-          }));
-        } catch (e) {
-          alert("导入失败：文件格式错误");
-        }
-      },
-
-      cleanInvalidImages: async () => {
-        const state = get();
-        const validImages: CardImage[] = [];
-        let invalidCount = 0;
-
-        function checkImageUrl(url: string): Promise<boolean> {
-          return new Promise((resolve) => {
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.onload = () => resolve(true);
-            img.onerror = () => resolve(false);
-            img.src = url;
-            setTimeout(() => resolve(false), 5000);
+        if (!exists) {
+          addImage({
+            src: imageUrl,
+            name: file.name.replace(/\.[^/.]+$/, ""),
+            category: "未分类",
+            width: 300,
+            height: 300,
           });
+          addedCount++;
         }
+      }
 
-        for (const image of state.images) {
-          try {
-            const isValid = await checkImageUrl(image.src);
-            if (isValid) {
-              validImages.push(image);
-            } else {
-              invalidCount++;
-              console.log("URL 无效，从本地移除:", image.name);
-            }
-          } catch {
-            invalidCount++;
-            console.log("URL 无效，从本地移除:", image.name);
-          }
+      alert(`同步完成，新增 ${addedCount} 张图片`);
+      fetchGithubCount();
+    } catch (error) {
+      console.error("从 GitHub 加载图片失败:", error);
+      alert("同步失败，请查看控制台");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // 点击图片
+  const handleImageClick = (imageId: string) => {
+    if (isBatchMode) {
+      setSelectedImages((prev) => {
+        const next = new Set(prev);
+        if (next.has(imageId)) {
+          next.delete(imageId);
+        } else {
+          next.add(imageId);
         }
+        return next;
+      });
+    } else {
+      onAddToCanvas?.(imageId);
+    }
+  };
 
-        if (invalidCount > 0) {
-          console.log(
-            "共清理无效图片:",
-            invalidCount,
-            "张（仅本地，不删 GitHub）",
-          );
-        }
+  // 添加分类
+  const handleAddCategory = () => {
+    if (newCategoryName.trim()) {
+      addCategory(newCategoryName.trim());
+      setNewCategoryName("");
+    }
+  };
 
-        set({ images: validImages });
-      },
+  // 批量修改分类
+  const handleBatchSetCategory = (category: string) => {
+    selectedImages.forEach((id) => {
+      updateImage(id, { category });
+    });
+    setSelectedImages(new Set());
+    setIsBatchMode(false);
+  };
 
-      cleanDuplicateImages: () => {
-        set((state) => {
-          const seen = new Map<string, CardImage>();
-          const duplicates: CardImage[] = [];
+  // 批量删除
+  const handleBatchDelete = () => {
+    if (confirm(`确定删除选中的 ${selectedImages.size} 张图片吗？`)) {
+      selectedImages.forEach((id) => removeImage(id));
+      setSelectedImages(new Set());
+      setIsBatchMode(false);
+    }
+  };
 
-          state.images.forEach((img) => {
-            if (seen.has(img.name)) {
-              duplicates.push(img);
-            } else {
-              seen.set(img.name, img);
-            }
-          });
+  // 清理无效图片
+  const handleCleanInvalid = () => {
+    if (confirm("确定清理所有无效图片吗？")) {
+      useStore.getState().cleanInvalidImages();
+    }
+  };
 
-          if (duplicates.length > 0) {
-            console.log(
-              "清理重复图片:",
-              duplicates.length,
-              "张（仅本地，不删 GitHub）",
-            );
-          }
+  return (
+    <div className="h-full flex flex-col bg-white border-r border-gray-200">
+      {/* 标题栏 */}
+      <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
+        >
+          <span>{isExpanded ? "▼" : "▶"}</span>
+          <span>图片图库</span>
+        </button>
+        <span className="text-xs text-gray-400">{images.length} 张</span>
+      </div>
 
-          return {
-            images: state.images.filter((img) => !duplicates.includes(img)),
-          };
-        });
-      },
-    }),
-    {
-      name: "literacy-card-storage",
-      storage: createJSONStorage(() => ({
-        getItem: async (name: string) => {
-          const value = await get(name);
-          return value ?? null;
-        },
-        setItem: async (name: string, value: any) => {
-          await set(name, value);
-        },
-        removeItem: async (name: string) => {
-          await del(name);
-        },
-      })),
-      partialize: (state) => ({
-        images: state.images,
-        scenes: state.scenes,
-        currentSceneId: state.currentSceneId,
-        canvasColor: state.canvasColor,
-        showGrid: state.showGrid,
-        gridSize: state.gridSize,
-        snapToGrid: state.snapToGrid,
-        categories: state.categories,
-        // 不持久化 selectedIds，因为它会在加载时重置
-      }),
-    },
-  ),
-);
+      {isExpanded && (
+        <>
+          {/* GitHub 图片数量 */}
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>GitHub:</span>
+              {isLoadingGithubCount ? (
+                <span className="animate-pulse">加载中...</span>
+              ) : githubCount !== null ? (
+                <span className="text-green-600">{githubCount} 张</span>
+              ) : (
+                <span className="text-red-400">获取失败</span>
+              )}
+            </div>
+          </div>
+
+          {/* 分类筛选栏 */}
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-500">分类筛选</span>
+              <button
+                onClick={() => setIsManagingCategories(!isManagingCategories)}
+                className="text-xs text-blue-500 hover:text-blue-600"
+              >
+                {isManagingCategories ? "完成" : "管理"}
+              </button>
+            </div>
+
+            {/* 分类标签 */}
+            <div className="flex flex-wrap gap-1">
+              {["全部", ...categories].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => {
+                    setSelectedCategory(cat);
+                    setPage(1);
+                  }}
+                  className={`px-2 py-0.5 rounded text-xs ${
+                    selectedCategory === cat
+                      ? "bg-green-500 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* 分类管理面板 */}
+            {isManagingCategories && (
+              <div className="mt-2 p-2 bg-gray-50 rounded">
+                <div className="flex gap-1 mb-2">
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
+                    placeholder="新分类名称"
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500"
+                  />
+                  <button
+                    onClick={handleAddCategory}
+                    className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                  >
+                    添加
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {categories
+                    .filter((c) => c !== "未分类")
+                    .map((cat) => (
+                      <span
+                        key={cat}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded text-xs"
+                      >
+                        {cat}
+                        <button
+                          onClick={() => removeCategory(cat)}
+                          className="text-red-400 hover:text-red-600"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 同步按钮 */}
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+            <button
+              onClick={handleSyncFromGitHub}
+              disabled={isSyncing}
+              className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
+            >
+              {isSyncing ? (
+                <>
+                  <span className="animate-spin">↻</span>
+                  <span>同步中...</span>
+                </>
+              ) : (
+                <>
+                  <span>🔄</span>
+                  <span>从 GitHub 同步</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* 搜索框 */}
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+            <input
+              type="text"
+              placeholder="搜索图片..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+                setSelectedImages(new Set());
+              }}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500"
+            />
+          </div>
+
+          {/* 排序按钮 */}
+          <div className="flex-shrink-0 px-3 py-1 border-b border-gray-100 flex gap-2">
+            <button
+              onClick={() => setSortBy("name")}
+              className={`text-xs px-2 py-0.5 rounded ${
+                sortBy === "name"
+                  ? "bg-green-500 text-white"
+                  : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              按名称
+            </button>
+            <button
+              onClick={() => setSortBy("date")}
+              className={`text-xs px-2 py-0.5 rounded ${
+                sortBy === "date"
+                  ? "bg-green-500 text-white"
+                  : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              按日期
+            </button>
+          </div>
+
+          {/* 添加/多选按钮 */}
+          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 flex gap-2">
+            <button
+              onClick={() => {
+                setIsBatchMode(!isBatchMode);
+                setSelectedImages(new Set());
+              }}
+              className={`flex-1 px-2 py-1 rounded text-xs ${
+                isBatchMode
+                  ? "bg-orange-500 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {isBatchMode ? "退出多选" : "批量操作"}
+            </button>
+            <button
+              onClick={handleCleanInvalid}
+              className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200"
+            >
+              清理无效
+            </button>
+          </div>
+
+          {/* 批量模式操作按钮 */}
+          {isBatchMode && (
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1">
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500">已选 {selectedImages.size} 张</span>
+                <button
+                  onClick={handleBatchDelete}
+                  disabled={selectedImages.size === 0}
+                  className="ml-auto px-2 py-0.5 bg-red-500 text-white rounded text-xs disabled:opacity-50 hover:bg-red-600"
+                >
+                  删除
+                </button>
+              </div>
+              {/* 批量修改分类 */}
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500">移到:</span>
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => handleBatchSetCategory(cat)}
+                    disabled={selectedImages.size === 0}
+                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs disabled:opacity-50 hover:bg-gray-200"
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 图片列表 - 修复：添加 WebkitOverflowScrolling 支持 iPad 滚动 */}
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-y-auto p-2"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              overscrollBehavior: "contain",
+            }}
+          >
+            {totalCount === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">
+                {searchTerm ? "无结果" : "暂无图片，点击 🔄 同步从 GitHub 加载"}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {paginatedImages.map((image) => (
+                    <div
+                      key={image.id}
+                      className={`relative aspect-square rounded-lg overflow-hidden border-2 cursor-pointer transition-all hover:shadow-md ${
+                        isBatchMode && selectedImages.has(image.id)
+                          ? "border-green-500 ring-2 ring-green-300"
+                          : "border-gray-200 hover:border-green-300"
+                      }`}
+                      onClick={() => handleImageClick(image.id)}
+                    >
+                      <div className="w-full h-full bg-gray-50">
+                        {image.src ? (
+                          <img
+                            src={image.src}
+                            alt={image.name}
+                            className="w-full h-full object-cover pointer-events-none"
+                            draggable={false}
+                            loading="lazy"
+                            onError={(e) => {
+                              console.error(
+                                "图片加载失败:",
+                                image.id,
+                                image.name,
+                                image.src,
+                              );
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center leading-tight px-1 break-all">${image.name || "?"}</div>`;
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                            {image.name || "?"}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 批量选择标记 */}
+                      {isBatchMode && (
+                        <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-green-500 text-white text-xs flex items-center justify-center">
+                          {selectedImages.has(image.id) ? "✓" : ""}
+                        </div>
+                      )}
+
+                      {/* 删除按钮 */}
+                      {!isBatchMode && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`确定删除 "${image.name}" 吗？`)) {
+                              removeImage(image.id);
+                            }
+                          }}
+                          className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
+                      )}
+
+                      {/* 图片名称 */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate">
+                        {image.name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {hasMore && (
+                  <button
+                    onClick={() => setPage((p) => p + 1)}
+                    className="w-full mt-2 py-1.5 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                  >
+                    加载更多 ({page}/{totalPages})
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default ImageLibrary;
