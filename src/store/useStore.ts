@@ -22,8 +22,16 @@ interface StoreState {
   removeCard: (instanceId: string) => void;
   bringToFront: (instanceId: string) => void;
 
-  selectedId: string | null;
-  setSelectedId: (id: string | null) => void;
+  // ========== 多选状态 ==========
+  selectedIds: Set<string>;
+  setSelectedIds: (ids: Set<string>) => void;
+  toggleSelect: (id: string) => void;
+  selectOne: (id: string) => void;
+  selectRange: (id: string) => void;
+  clearSelection: () => void;
+  selectAll: () => void;
+  // =============================
+
   isDragging: boolean;
   setIsDragging: (dragging: boolean) => void;
 
@@ -54,14 +62,11 @@ interface StoreState {
   exportScene: () => string;
   importScene: (json: string) => void;
 
-  // ========== 分类功能 ==========
   categories: string[];
   addCategory: (category: string) => void;
   removeCategory: (category: string) => void;
   updateImageCategory: (id: string, category: string) => void;
-  // ============================
 
-  // 清理功能（只清理本地 IndexedDB，绝不删除 GitHub）
   cleanInvalidImages: () => Promise<void>;
   cleanDuplicateImages: () => void;
 }
@@ -73,10 +78,68 @@ export const useStore = create<StoreState>()(
       scenes: [],
       currentSceneId: null,
       placedCards: [],
-      selectedId: null,
+
+      // ========== 多选状态 ==========
+      selectedIds: new Set<string>(),
+      setSelectedIds: (ids) => set({ selectedIds: new Set(ids) }),
+
+      toggleSelect: (id) =>
+        set((state) => {
+          const newSet = new Set(state.selectedIds);
+          if (newSet.has(id)) {
+            newSet.delete(id);
+          } else {
+            newSet.add(id);
+          }
+          return { selectedIds: newSet };
+        }),
+
+      selectOne: (id) => set({ selectedIds: new Set([id]) }),
+
+      selectRange: (id) =>
+        set((state) => {
+          const cards = state.placedCards;
+          if (cards.length === 0) return state;
+
+          const selectedArray = Array.from(state.selectedIds);
+          let anchorId = selectedArray[selectedArray.length - 1];
+
+          if (!anchorId) {
+            return { selectedIds: new Set([id]) };
+          }
+
+          const anchorIndex = cards.findIndex((c) => c.instanceId === anchorId);
+          const targetIndex = cards.findIndex((c) => c.instanceId === id);
+
+          if (anchorIndex === -1 || targetIndex === -1) {
+            return { selectedIds: new Set([id]) };
+          }
+
+          const start = Math.min(anchorIndex, targetIndex);
+          const end = Math.max(anchorIndex, targetIndex);
+
+          const newSet = new Set(state.selectedIds);
+          for (let i = start; i <= end; i++) {
+            newSet.add(cards[i].instanceId);
+          }
+
+          return { selectedIds: newSet };
+        }),
+
+      clearSelection: () => set({ selectedIds: new Set() }),
+
+      selectAll: () =>
+        set((state) => ({
+          selectedIds: new Set(state.placedCards.map((c) => c.instanceId)),
+        })),
+      // =============================
+
       isDragging: false,
+      setIsDragging: (dragging) => set({ isDragging: dragging }),
       gridSize: 40,
+      setGridSize: (size) => set({ gridSize: size }),
       snapToGrid: true,
+      setSnapToGrid: (snap) => set({ snapToGrid: snap }),
       history: [[]],
       historyIndex: 0,
       canUndo: false,
@@ -87,11 +150,10 @@ export const useStore = create<StoreState>()(
       canvasColor: "#e8e8e8",
       setCanvasColor: (color) => set({ canvasColor: color }),
       clearCanvas: () => {
-        set({ placedCards: [], selectedId: null });
+        set({ placedCards: [], selectedIds: new Set() });
         get().saveHistory();
       },
 
-      // ========== 分类功能 ==========
       categories: ["中文", "英文", "未分类"],
 
       addCategory: (category) =>
@@ -114,7 +176,6 @@ export const useStore = create<StoreState>()(
             img.id === id ? { ...img, category } : img,
           ),
         })),
-      // ============================
 
       addImage: (image) => {
         set((state) => {
@@ -125,7 +186,6 @@ export const useStore = create<StoreState>()(
             console.log("图片已存在，跳过:", image.name);
             return state;
           }
-
           return {
             images: [
               ...state.images,
@@ -164,6 +224,7 @@ export const useStore = create<StoreState>()(
           placedCards: [],
           history: [[]],
           historyIndex: 0,
+          selectedIds: new Set(),
         }));
         return id;
       },
@@ -178,6 +239,7 @@ export const useStore = create<StoreState>()(
             snapToGrid: scene.snapToGrid,
             history: [scene.cards],
             historyIndex: 0,
+            selectedIds: new Set(),
           });
         }
       },
@@ -201,13 +263,11 @@ export const useStore = create<StoreState>()(
         if (!sceneId) {
           sceneId = get().createScene("默认场景");
         }
-
         const currentState = get();
         const maxZ = Math.max(
           0,
           ...currentState.placedCards.map((c) => c.zIndex),
         );
-
         const newCard: PlacedCard = {
           instanceId: uuidv4(),
           imageId,
@@ -217,12 +277,10 @@ export const useStore = create<StoreState>()(
           scale: 1,
           zIndex: maxZ + 1,
         };
-
         set((prevState) => ({
           placedCards: [...prevState.placedCards, newCard],
-          selectedId: newCard.instanceId,
+          selectedIds: new Set([newCard.instanceId]),
         }));
-
         get().saveHistory();
       },
 
@@ -239,7 +297,11 @@ export const useStore = create<StoreState>()(
           placedCards: state.placedCards.filter(
             (c) => c.instanceId !== instanceId,
           ),
-          selectedId: state.selectedId === instanceId ? null : state.selectedId,
+          selectedIds: (() => {
+            const newSet = new Set(state.selectedIds);
+            newSet.delete(instanceId);
+            return newSet;
+          })(),
         }));
         get().saveHistory();
       },
@@ -249,7 +311,6 @@ export const useStore = create<StoreState>()(
         get().updateCard(instanceId, { zIndex: maxZ + 1 });
       },
 
-      setSelectedId: (id) => set({ selectedId: id }),
       setIsDragging: (dragging) => set({ isDragging: dragging }),
       setGridSize: (size) => set({ gridSize: size }),
       setSnapToGrid: (snap) => set({ snapToGrid: snap }),
@@ -275,6 +336,7 @@ export const useStore = create<StoreState>()(
             historyIndex: newIndex,
             canUndo: newIndex > 0,
             canRedo: true,
+            selectedIds: new Set(),
           };
         }),
 
@@ -287,28 +349,31 @@ export const useStore = create<StoreState>()(
             historyIndex: newIndex,
             canUndo: true,
             canRedo: newIndex < state.history.length - 1,
+            selectedIds: new Set(),
           };
         }),
 
       copy: () =>
         set((state) => ({
-          clipboard: state.selectedId
-            ? state.placedCards.filter((c) => c.instanceId === state.selectedId)
-            : [],
+          clipboard: state.placedCards.filter((c) =>
+            state.selectedIds.has(c.instanceId),
+          ),
         })),
 
       paste: () =>
         set((state) => {
           if (state.clipboard.length === 0) return state;
-          const newCards = state.clipboard.map((card) => ({
+          const maxZ = Math.max(0, ...state.placedCards.map((c) => c.zIndex));
+          const newCards = state.clipboard.map((card, idx) => ({
             ...card,
             instanceId: uuidv4(),
-            x: card.x + 20,
-            y: card.y + 20,
+            x: card.x + 30,
+            y: card.y + 30,
+            zIndex: maxZ + idx + 1,
           }));
           return {
             placedCards: [...state.placedCards, ...newCards],
-            selectedId: newCards[0].instanceId,
+            selectedIds: new Set(newCards.map((c) => c.instanceId)),
           };
         }),
 
@@ -345,13 +410,12 @@ export const useStore = create<StoreState>()(
             scenes: [...state.scenes, newScene],
             currentSceneId: id,
             placedCards: newScene.cards,
+            selectedIds: new Set(),
           }));
         } catch (e) {
           alert("导入失败：文件格式错误");
         }
       },
-
-      // ========== 清理功能（只清理本地 IndexedDB，绝不删除 GitHub 文件） ==========
 
       cleanInvalidImages: async () => {
         const state = get();

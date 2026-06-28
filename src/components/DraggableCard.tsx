@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState, useEffect } from "react";
+import React, { useCallback, useRef, useState, useEffect } from "react";
 import { useStore } from "@/store/useStore";
 import { PlacedCard } from "@/types";
 
@@ -9,15 +9,22 @@ interface DraggableCardProps {
 const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
   const {
     images,
-    selectedId,
-    setSelectedId,
+    selectedIds,
+    selectOne,
+    toggleSelect,
+    selectRange,
     updateCard,
     bringToFront,
     snapToGrid,
     gridSize,
+    setIsDragging,
   } = useStore();
-  const [isDragging, setIsDragging] = useState(false);
+
+  const [isDragging, setIsDraggingLocal] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, cardX: 0, cardY: 0 });
+  const initialPositionsRef = useRef<Map<string, { x: number; y: number }>>(
+    new Map(),
+  );
 
   const image = images.find((img) => img.id === card.imageId);
   if (!image) {
@@ -25,17 +32,42 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
     return null;
   }
 
-  const isSelected = selectedId === card.instanceId;
+  const isSelected = selectedIds.has(card.instanceId);
 
-  // 开始拖拽
+  // 开始拖拽（支持多卡一起拖拽）
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
 
-      // 选中当前卡片
-      setSelectedId(card.instanceId);
+      // Ctrl/Cmd + 点击：切换选中状态
+      if (e.ctrlKey || e.metaKey) {
+        toggleSelect(card.instanceId);
+        return;
+      }
+
+      // Shift + 点击：范围选择
+      if (e.shiftKey) {
+        selectRange(card.instanceId);
+        return;
+      }
+
+      // 普通点击：如果当前卡片不在选中集合中，只选这一张
+      if (!isSelected) {
+        selectOne(card.instanceId);
+      }
+
+      // 提升层级
       bringToFront(card.instanceId);
+
+      // 记录所有选中卡片的初始位置
+      const store = useStore.getState();
+      initialPositionsRef.current = new Map();
+      store.placedCards.forEach((c) => {
+        if (store.selectedIds.has(c.instanceId)) {
+          initialPositionsRef.current.set(c.instanceId, { x: c.x, y: c.y });
+        }
+      });
 
       // 记录拖拽起始位置
       dragStartRef.current = {
@@ -45,12 +77,23 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
         cardY: card.y,
       };
 
+      setIsDraggingLocal(true);
       setIsDragging(true);
     },
-    [card.instanceId, card.x, card.y, setSelectedId, bringToFront],
+    [
+      card.instanceId,
+      card.x,
+      card.y,
+      isSelected,
+      toggleSelect,
+      selectRange,
+      selectOne,
+      bringToFront,
+      setIsDragging,
+    ],
   );
 
-  // 拖拽中
+  // 拖拽中（移动所有选中的卡片）
   useEffect(() => {
     if (!isDragging) return;
 
@@ -58,20 +101,26 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       const dx = e.clientX - dragStartRef.current.x;
       const dy = e.clientY - dragStartRef.current.y;
 
-      let newX = dragStartRef.current.cardX + dx;
-      let newY = dragStartRef.current.cardY + dy;
+      const store = useStore.getState();
 
-      // 网格吸附
-      if (snapToGrid) {
-        newX = Math.round(newX / gridSize) * gridSize;
-        newY = Math.round(newY / gridSize) * gridSize;
-      }
+      initialPositionsRef.current.forEach((pos, id) => {
+        let newX = pos.x + dx;
+        let newY = pos.y + dy;
 
-      updateCard(card.instanceId, { x: newX, y: newY });
+        // 网格吸附
+        if (snapToGrid) {
+          newX = Math.round(newX / gridSize) * gridSize;
+          newY = Math.round(newY / gridSize) * gridSize;
+        }
+
+        updateCard(id, { x: newX, y: newY });
+      });
     };
 
     const handleMouseUp = () => {
+      setIsDraggingLocal(false);
       setIsDragging(false);
+      useStore.getState().saveHistory();
     };
 
     document.addEventListener("mousemove", handleMouseMove);
@@ -81,7 +130,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, card.instanceId, snapToGrid, gridSize, updateCard]);
+  }, [isDragging, snapToGrid, gridSize, updateCard, setIsDragging]);
 
   // 触摸支持（iPad）
   const handleTouchStart = useCallback(
@@ -89,8 +138,29 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       e.stopPropagation();
       const touch = e.touches[0];
 
-      setSelectedId(card.instanceId);
+      // 如果已经在多选模式，切换选中
+      const store = useStore.getState();
+      if (
+        store.selectedIds.size > 1 ||
+        (store.selectedIds.has(card.instanceId) && store.selectedIds.size === 1)
+      ) {
+        toggleSelect(card.instanceId);
+        return;
+      }
+
+      if (!isSelected) {
+        selectOne(card.instanceId);
+      }
+
       bringToFront(card.instanceId);
+
+      // 记录所有选中卡片的初始位置
+      initialPositionsRef.current = new Map();
+      store.placedCards.forEach((c) => {
+        if (store.selectedIds.has(c.instanceId)) {
+          initialPositionsRef.current.set(c.instanceId, { x: c.x, y: c.y });
+        }
+      });
 
       dragStartRef.current = {
         x: touch.clientX,
@@ -99,9 +169,19 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
         cardY: card.y,
       };
 
+      setIsDraggingLocal(true);
       setIsDragging(true);
     },
-    [card.instanceId, card.x, card.y, setSelectedId, bringToFront],
+    [
+      card.instanceId,
+      card.x,
+      card.y,
+      isSelected,
+      toggleSelect,
+      selectOne,
+      bringToFront,
+      setIsDragging,
+    ],
   );
 
   useEffect(() => {
@@ -113,19 +193,23 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       const dx = touch.clientX - dragStartRef.current.x;
       const dy = touch.clientY - dragStartRef.current.y;
 
-      let newX = dragStartRef.current.cardX + dx;
-      let newY = dragStartRef.current.cardY + dy;
+      initialPositionsRef.current.forEach((pos, id) => {
+        let newX = pos.x + dx;
+        let newY = pos.y + dy;
 
-      if (snapToGrid) {
-        newX = Math.round(newX / gridSize) * gridSize;
-        newY = Math.round(newY / gridSize) * gridSize;
-      }
+        if (snapToGrid) {
+          newX = Math.round(newX / gridSize) * gridSize;
+          newY = Math.round(newY / gridSize) * gridSize;
+        }
 
-      updateCard(card.instanceId, { x: newX, y: newY });
+        updateCard(id, { x: newX, y: newY });
+      });
     };
 
     const handleTouchEnd = () => {
+      setIsDraggingLocal(false);
       setIsDragging(false);
+      useStore.getState().saveHistory();
     };
 
     document.addEventListener("touchmove", handleTouchMove, { passive: false });
@@ -135,11 +219,11 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
       document.removeEventListener("touchmove", handleTouchMove);
       document.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [isDragging, card.instanceId, snapToGrid, gridSize, updateCard]);
+  }, [isDragging, snapToGrid, gridSize, updateCard, setIsDragging]);
 
   return (
     <div
-      className="absolute select-none"
+      className="placed-card absolute select-none"
       style={{
         left: card.x,
         top: card.y,
@@ -154,10 +238,18 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ card }) => {
           ? "0 4px 12px rgba(76,175,80,0.4)"
           : "0 2px 8px rgba(0,0,0,0.1)",
         transition: isDragging ? "none" : "box-shadow 0.2s",
+        touchAction: "none",
       }}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
     >
+      {/* 选中标记（多选时显示数量） */}
+      {isSelected && selectedIds.size > 1 && (
+        <div className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-xs z-10">
+          {selectedIds.size}
+        </div>
+      )}
+
       <img
         src={image.src}
         alt={image.name}
