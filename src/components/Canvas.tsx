@@ -102,12 +102,12 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
   const handleCanvasMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      if (e.button !== 0) return;
-      const target = e.target as HTMLElement;
-      if (target.closest(".placed-card")) return;
+      // 使用 e.buttons 判断鼠标按键，避免 e.button 类型问题
+      // e.buttons: 1=左键, 2=右键, 4=中键
+      const buttons = e.buttons;
 
-      // 中键或空格+拖拽 = 平移画布
-      if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      // 中键(4)或左键(1)+Alt = 平移画布
+      if (buttons === 4 || (buttons === 1 && e.altKey)) {
         isPanningRef.current = true;
         panStartRef.current = {
           x: e.clientX - canvasOffset.x,
@@ -115,6 +115,12 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         };
         return;
       }
+
+      // 只处理左键
+      if (buttons !== 1) return;
+
+      const target = e.target as HTMLElement;
+      if (target.closest(".placed-card")) return;
 
       const point = getCanvasPoint(e.clientX, e.clientY);
       if (!e.ctrlKey && !e.metaKey) {
