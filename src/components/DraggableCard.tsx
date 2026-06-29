@@ -396,16 +396,20 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         >
           <button
             className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-blue-600 active:bg-blue-700"
-            onClick={handleRotate}
-            onTouchStart={handleRotate}
+            onClick={(e) => handleRotate(e)}
+            onTouchStart={(e) =>
+              handleRotate(e as unknown as React.MouseEvent | React.TouchEvent)
+            }
             title="旋转"
           >
             ↻
           </button>
           <button
             className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-red-600 active:bg-red-700"
-            onClick={handleDelete}
-            onTouchStart={handleDelete}
+            onClick={(e) => handleDelete(e)}
+            onTouchStart={(e) =>
+              handleDelete(e as unknown as React.MouseEvent | React.TouchEvent)
+            }
             title="删除"
           >
             ×
