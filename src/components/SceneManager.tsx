@@ -56,13 +56,13 @@ const SceneManager: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#4CAF50] text-white px-2 py-1 flex items-center gap-1 shadow-md text-sm">
-      {/* 添加图片按钮 */}
+    <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-sm flex-wrap">
+      {/* 添加图片按钮 - 白色圆角方形 */}
       <button
         onClick={() => document.getElementById("file-upload")?.click()}
-        className="bg-white/20 hover:bg-white/30 rounded px-2 py-1 flex items-center gap-1 transition-colors"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
       >
-        <span className="text-sm">📁</span>
+        <span>📁</span>
         <span>添加</span>
       </button>
 
@@ -71,9 +71,9 @@ const SceneManager: React.FC = () => {
         onClick={() => {
           if (confirm("确定清空画布吗？")) clearCanvas();
         }}
-        className="bg-white/20 hover:bg-white/30 rounded px-2 py-1 flex items-center gap-1 transition-colors"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
       >
-        <span className="text-sm">🗑</span>
+        <span>🗑</span>
         <span>清空</span>
       </button>
 
@@ -81,9 +81,9 @@ const SceneManager: React.FC = () => {
       <button
         onClick={handleSaveScene}
         disabled={!currentSceneId}
-        className="bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded px-2 py-1 flex items-center gap-1 transition-colors"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
       >
-        <span className="text-sm">💾</span>
+        <span>💾</span>
         <span>保存</span>
       </button>
 
@@ -91,9 +91,9 @@ const SceneManager: React.FC = () => {
       <div className="relative">
         <button
           onClick={() => setShowScenes(!showScenes)}
-          className="bg-white/20 hover:bg-white/30 rounded px-2 py-1 flex items-center gap-1 transition-colors"
+          className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
         >
-          <span className="text-sm">📂</span>
+          <span>📂</span>
           <span>场景</span>
         </button>
 
@@ -114,7 +114,7 @@ const SceneManager: React.FC = () => {
                     setNewSceneName("");
                   }
                 }}
-                className="bg-[#4CAF50] text-white px-2 py-1 rounded text-sm"
+                className="bg-green-500 text-white px-2 py-1 rounded text-sm hover:bg-green-600"
               >
                 +
               </button>
@@ -148,69 +148,37 @@ const SceneManager: React.FC = () => {
         )}
       </div>
 
-      {/* 导出导入 */}
+      {/* 导出按钮 */}
       <button
         onClick={handleExport}
         disabled={!currentSceneId}
-        className="bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded px-2 py-1 transition-colors text-sm"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-xs"
       >
         导出
       </button>
+
+      {/* 导入按钮 */}
       <button
         onClick={() => setShowImport(true)}
-        className="bg-white/20 hover:bg-white/30 rounded px-2 py-1 transition-colors text-sm"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-xs"
       >
         导入
       </button>
-
-      {/* 网格设置 */}
-      <div className="flex items-center gap-2 ml-2 bg-white/10 rounded px-2 py-1">
-        <label className="flex items-center gap-1 text-xs cursor-pointer">
-          <input
-            type="checkbox"
-            checked={snapToGrid}
-            onChange={(e) => setSnapToGrid(e.target.checked)}
-            className="w-3 h-3 accent-green-600"
-          />
-          <span>吸附</span>
-        </label>
-
-        <label className="flex items-center gap-1 text-xs cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showGrid}
-            onChange={(e) => setShowGrid(e.target.checked)}
-            className="w-3 h-3 accent-green-600"
-          />
-          <span>网格</span>
-        </label>
-
-        <div className="flex items-center gap-1">
-          <span className="text-xs">{gridSize}</span>
-          <input
-            type="range"
-            min="20"
-            max="200"
-            step="10"
-            value={gridSize}
-            onChange={(e) => setGridSize(Number(e.target.value))}
-            className="w-16 accent-green-600"
-          />
-        </div>
-      </div>
 
       {/* 撤销重做 */}
       <button
         onClick={undo}
         disabled={!canUndo}
-        className="bg-white/20 hover:bg-white/30 disabled:opacity-30 rounded px-2 py-1 transition-colors ml-1 text-sm"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-xs"
+        title="撤销"
       >
         ↩️
       </button>
       <button
         onClick={redo}
         disabled={!canRedo}
-        className="bg-white/20 hover:bg-white/30 disabled:opacity-30 rounded px-2 py-1 transition-colors text-sm"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-xs"
+        title="重做"
       >
         ↪️
       </button>
@@ -235,7 +203,7 @@ const SceneManager: React.FC = () => {
               </button>
               <button
                 onClick={handleImport}
-                className="px-4 py-2 bg-[#4CAF50] text-white rounded-lg hover:bg-green-600"
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
               >
                 导入
               </button>

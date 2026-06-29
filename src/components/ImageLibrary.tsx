@@ -49,6 +49,8 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const resizeStartXRef = useRef(0);
+  const resizeStartWidthRef = useRef(width);
 
   const fetchGithubCount = useCallback(async () => {
     setIsLoadingGithubCount(true);
@@ -77,17 +79,25 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     fetchGithubCount();
   }, [fetchGithubCount]);
 
-  // 拖拽调整宽度
+  // 拖拽调整宽度 - 使用更可靠的方式
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
       e.preventDefault();
-      const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, e.clientX));
+      const deltaX = e.clientX - resizeStartXRef.current;
+      const newWidth = Math.max(
+        MIN_WIDTH,
+        Math.min(MAX_WIDTH, resizeStartWidthRef.current + deltaX),
+      );
       onWidthChange?.(newWidth);
     };
 
     const handleMouseUp = () => {
-      setIsResizing(false);
+      if (isResizing) {
+        setIsResizing(false);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
     };
 
     if (isResizing) {
@@ -100,8 +110,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
     };
   }, [isResizing, onWidthChange]);
 
@@ -276,6 +284,14 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = width;
+    setIsResizing(true);
+  };
+
   return (
     <div
       ref={containerRef}
@@ -284,16 +300,12 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     >
       {/* 拖拽调整宽度的手柄 */}
       <div
-        className="absolute right-0 top-0 bottom-0 w-4 cursor-col-resize z-50 flex items-center justify-center group"
-        onMouseDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsResizing(true);
-        }}
+        className="absolute right-0 top-0 bottom-0 w-5 cursor-col-resize z-50 flex items-center justify-center"
+        onMouseDown={handleResizeStart}
         style={{ touchAction: "none" }}
       >
         <div
-          className="w-1 h-12 rounded-full transition-colors"
+          className="w-1.5 h-16 rounded-full transition-colors"
           style={{
             background: isResizing ? "#3b82f6" : "#d1d5db",
           }}
@@ -326,6 +338,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             </div>
           </div>
 
+          {/* 分类筛选 - 改为下拉选择 */}
           <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-gray-500">分类筛选</span>
@@ -337,27 +350,20 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </button>
             </div>
 
-            <div className="flex flex-wrap gap-1">
+            <select
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500 bg-white"
+            >
               {["全部", ...categories].map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => {
-                    setSelectedCategory(cat);
-                    setPage(1);
-                  }}
-                  className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                    selectedCategory === cat
-                      ? "bg-green-500 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {cat}
-                  <span className="ml-1 opacity-70">
-                    ({categoryCounts[cat] || 0})
-                  </span>
-                </button>
+                <option key={cat} value={cat}>
+                  {cat} ({categoryCounts[cat] || 0})
+                </option>
               ))}
-            </div>
+            </select>
 
             {isManagingCategories && (
               <div className="mt-2 p-2 bg-gray-50 rounded">
@@ -576,12 +582,16 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                               target.style.display = "none";
                               const parent = target.parentElement;
                               if (parent) {
-                                parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-[10px] text-gray-400 text-center leading-tight px-1 break-all">${image.name || "?"}</div>`;
+                                parent.innerHTML = `
+                                  <div class="flex items-center justify-center w-full h-full text-xs text-gray-400 bg-gray-100">
+                                    ${image.name || "?"}
+                                  </div>
+                                `;
                               }
                             }}
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                          <div className="flex items-center justify-center w-full h-full text-xs text-gray-400 bg-gray-100">
                             {image.name || "?"}
                           </div>
                         )}
@@ -589,7 +599,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
 
                       {/* 批量选择标记 */}
                       {isBatchMode && selectedImages.has(image.id) && (
-                        <div className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center font-bold">
+                        <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white text-xs shadow-sm">
                           ✓
                         </div>
                       )}
@@ -599,17 +609,18 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm(`确定删除 "${image.name}" 吗？`)) {
+                            if (confirm(`确定删除"${image.name}"吗？`)) {
                               removeImage(image.id);
                             }
                           }}
-                          className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                          className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500/80 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-xs opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
+                          style={{ zIndex: 10 }}
                         >
                           ×
                         </button>
                       )}
 
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] px-1 py-0.5 truncate">
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate text-center">
                         {image.name}
                       </div>
                     </div>
@@ -619,7 +630,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 {hasMore && (
                   <button
                     onClick={() => setPage((p) => p + 1)}
-                    className="w-full mt-2 py-1.5 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                    className="w-full mt-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
                   >
                     加载更多 ({page}/{totalPages})
                   </button>

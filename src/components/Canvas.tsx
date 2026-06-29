@@ -382,37 +382,43 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
   return (
     <div className="w-full h-full flex flex-col relative">
-      {/* 绿色菜单栏 - 参考图3样式 */}
-      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-green-500 text-white z-10">
-        <span className="text-xs font-medium">画布颜色:</span>
-        <div className="flex items-center gap-1">
-          {presetColors.map((color) => (
+      {/* 绿色菜单栏 - 参考图3样式：绿色底，白色圆角方形按钮，按钮间距 */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-green-500 text-white z-10 overflow-x-auto">
+        {/* 画布颜色 - 合并到菜单栏 */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium whitespace-nowrap">画布:</span>
+          {presetColors.slice(0, 6).map((color) => (
             <button
               key={color}
               onClick={() => setCanvasColor(color)}
-              className={`w-5 h-5 rounded-full border-2 ${canvasColor === color ? "border-white ring-1 ring-white" : "border-transparent"}`}
+              className={`w-5 h-5 rounded-full border-2 transition-all ${
+                canvasColor === color
+                  ? "border-white ring-1 ring-white scale-110"
+                  : "border-white/50 hover:border-white"
+              }`}
               style={{ backgroundColor: color }}
               title={color}
             />
           ))}
         </div>
-        <span className="text-xs opacity-80 ml-1">{canvasColor}</span>
 
-        {/* 缩放控制 - 白色圆角按钮 */}
-        <div className="flex items-center gap-1.5 ml-4">
+        <div className="w-px h-5 bg-white/30 mx-1" />
+
+        {/* 缩放控制 - 白色圆角方形按钮 */}
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => setCanvasScale((prev) => Math.max(0.3, prev - 0.2))}
-            className="w-7 h-7 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm font-bold"
+            className="w-8 h-8 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
             title="缩小"
           >
             −
           </button>
-          <span className="text-xs font-medium w-12 text-center">
+          <span className="text-xs font-medium w-10 text-center whitespace-nowrap">
             {Math.round(canvasScale * 100)}%
           </span>
           <button
             onClick={() => setCanvasScale((prev) => Math.min(3, prev + 0.2))}
-            className="w-7 h-7 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm font-bold"
+            className="w-8 h-8 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
             title="放大"
           >
             +
@@ -422,16 +428,18 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasScale(1);
               setCanvasOffset({ x: 0, y: 0 });
             }}
-            className="w-7 h-7 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm"
+            className="w-8 h-8 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm transition-colors"
             title="重置"
           >
             ⌂
           </button>
         </div>
 
-        {/* 网格控制 */}
-        <div className="flex items-center gap-2 ml-4">
-          <label className="flex items-center gap-1 text-xs cursor-pointer">
+        <div className="w-px h-5 bg-white/30 mx-1" />
+
+        {/* 网格控制 - 唯一入口，去重 */}
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1 text-xs cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={snapToGrid}
@@ -440,7 +448,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             />
             吸附
           </label>
-          <label className="flex items-center gap-1 text-xs cursor-pointer">
+          <label className="flex items-center gap-1 text-xs cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={showGrid}
@@ -449,19 +457,21 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             />
             网格
           </label>
-          <input
-            type="range"
-            min="10"
-            max="100"
-            value={gridSize}
-            onChange={(e) => setGridSize(Number(e.target.value))}
-            className="w-16 h-1.5"
-          />
-          <span className="text-xs w-8">{gridSize}</span>
+          <div className="flex items-center gap-1">
+            <span className="text-xs whitespace-nowrap">{gridSize}px</span>
+            <input
+              type="range"
+              min="10"
+              max="100"
+              value={gridSize}
+              onChange={(e) => setGridSize(Number(e.target.value))}
+              className="w-16 h-1.5 accent-white"
+            />
+          </div>
         </div>
 
         {selectedIds.size > 0 && (
-          <span className="ml-auto text-xs font-medium bg-white/20 px-2 py-0.5 rounded">
+          <span className="ml-auto text-xs font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap">
             已选 {selectedIds.size} 张
           </span>
         )}
@@ -497,12 +507,17 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             left: 0,
           }}
         >
+          {/* 网格线 - 修复显示 */}
           {showGrid && (
             <div
-              className="absolute inset-0 pointer-events-none"
+              className="absolute pointer-events-none"
               style={{
+                left: -5000,
+                top: -5000,
+                width: 10000,
+                height: 10000,
                 backgroundImage:
-                  "linear-gradient(to right, rgba(0,0,0,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.08) 1px, transparent 1px)",
+                  "linear-gradient(to right, rgba(0,0,0,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.12) 1px, transparent 1px)",
                 backgroundSize: `${gridSize}px ${gridSize}px`,
                 zIndex: 0,
               }}
