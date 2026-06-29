@@ -386,7 +386,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-green-500 text-white z-10 overflow-x-auto">
         {/* 画布颜色 - 合并到菜单栏 */}
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium whitespace-nowrap">画布:</span>
+          <span className="text-[10px] font-medium whitespace-nowrap">
+            画布:
+          </span>
           {presetColors.slice(0, 6).map((color) => (
             <button
               key={color}
@@ -413,7 +415,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           >
             −
           </button>
-          <span className="text-xs font-medium w-10 text-center whitespace-nowrap">
+          <span className="text-[10px] font-medium w-10 text-center whitespace-nowrap">
             {Math.round(canvasScale * 100)}%
           </span>
           <button
@@ -439,7 +441,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
         {/* 网格控制 - 唯一入口，去重 */}
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1 text-xs cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={snapToGrid}
@@ -448,7 +450,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             />
             吸附
           </label>
-          <label className="flex items-center gap-1 text-xs cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={showGrid}
@@ -458,7 +460,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             网格
           </label>
           <div className="flex items-center gap-1">
-            <span className="text-xs whitespace-nowrap">{gridSize}px</span>
+            <span className="text-[10px] whitespace-nowrap">{gridSize}px</span>
             <input
               type="range"
               min="10"
@@ -471,7 +473,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         </div>
 
         {selectedIds.size > 0 && (
-          <span className="ml-auto text-xs font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap">
+          <span className="ml-auto text-[10px] font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap">
             已选 {selectedIds.size} 张
           </span>
         )}
@@ -548,9 +550,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         {placedCards.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center">
-              <p className="text-lg text-gray-400 mb-2">👆</p>
-              <p className="text-sm text-gray-400">点击下方图库选择图片</p>
-              <p className="text-xs text-gray-300 mt-1">
+              <p className="text-[10px] text-gray-400 mb-2">👆</p>
+              <p className="text-[10px] text-gray-400">点击下方图库选择图片</p>
+              <p className="text-[10px] text-gray-300 mt-1">
                 拖拽移动 · 双指缩放 · 双指旋转
               </p>
             </div>
