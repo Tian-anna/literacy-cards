@@ -546,7 +546,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     className="grid gap-1.5"
                     style={{
                       gridTemplateColumns:
-                        "repeat(auto-fit, minmax(60px, 1fr))",
+                        "repeat(auto-fit, minmax(40px, 1fr))",
                     }}
                   >
                     {paginatedImages.map((image) => (
