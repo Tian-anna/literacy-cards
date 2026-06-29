@@ -632,13 +632,13 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         )}
       </div>
 
-      {/* 独立的拖拽手柄 - 在 flex 布局中作为独立元素 */}
+      {/* 拖拽手柄 */}
       <div
-        className="h-full w-4 cursor-col-resize flex items-center justify-center hover:bg-blue-100 transition-colors flex-shrink-0"
+        className="h-full w-4 cursor-col-resize flex items-center justify-center hover:bg-blue-100 transition-colors flex-shrink-0 relative"
         onMouseDown={handleResizeStart}
         style={{ touchAction: "none" }}
       >
-        <div className="w-1 h-16 bg-gray-400 rounded-full" />
+        <div className="w-1 h-16 bg-gray-400 rounded-full pointer-events-none" />
       </div>
     </div>
   );
