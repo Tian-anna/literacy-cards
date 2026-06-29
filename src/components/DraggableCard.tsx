@@ -387,16 +387,16 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         </div>
       )}
 
-      {/* 控制按钮 - 选中或长按显示 */}
+      {/* 控制按钮 - 放在卡片外部右上角，避免被裁剪 */}
       {(isSelected || showControls) && (
         <div
-          className="absolute top-1 right-1 flex gap-1 z-50"
+          className="absolute -top-6 -right-6 flex gap-1 z-50 p-2"
           onMouseDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
-            className="w-5 h-5 bg-blue-500/80 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-blue-600"
+            className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md border border-white"
             onClick={(e) => {
               e.stopPropagation();
               updateCard(card.instanceId, {
@@ -408,7 +408,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
             ↻
           </button>
           <button
-            className="w-5 h-5 bg-red-500/80 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-red-600"
+            className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md border border-white"
             onClick={(e) => {
               e.stopPropagation();
               const { removeCard } = useStore.getState();
