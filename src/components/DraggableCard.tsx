@@ -390,23 +390,27 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       {/* 控制按钮 - 选中或长按显示 */}
       {(isSelected || showControls) && (
         <div
-          className="absolute -top-7 left-1/2 -translate-x-1/2 flex gap-1 z-20"
+          className="absolute top-1 right-1 flex gap-1 z-50"
           onMouseDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <button
-            className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-blue-600 active:bg-blue-700"
-            onClick={(e) => handleRotate(e)}
-            onTouchStart={handleRotate}
+            className="w-5 h-5 bg-blue-500/80 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-blue-600"
+            onClick={(e) => {
+              e.stopPropagation();
+              updateCard(card.instanceId, {
+                rotation: (card.rotation + 15) % 360,
+              });
+            }}
             title="旋转"
           >
             ↻
           </button>
           <button
-            className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-red-600 active:bg-red-700"
-            onPointerDown={(e) => {
+            className="w-5 h-5 bg-red-500/80 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-red-600"
+            onClick={(e) => {
               e.stopPropagation();
-              e.preventDefault();
               const { removeCard } = useStore.getState();
               removeCard(card.instanceId);
               setShowControls(false);
