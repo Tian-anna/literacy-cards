@@ -431,17 +431,17 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   return (
     <div className="w-full h-full flex flex-col relative">
       {/* 绿色菜单栏 - 参考图3样式：绿色底，白色圆角方形按钮，按钮间距 */}
-      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-green-500 text-white z-10 overflow-x-auto">
+      <div className="flex-shrink-0 flex items-center gap-1 px-2 py-2 bg-green-500 text-white z-10 overflow-x-auto">
         {/* 画布颜色 - 合并到菜单栏 */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-medium whitespace-nowrap">
+        <div className="hidden sm:flex items-center gap-1">
+          <span className="text-[9px] font-medium whitespace-nowrap">
             画布:
           </span>
           {presetColors.slice(0, 6).map((color) => (
             <button
               key={color}
               onClick={() => setCanvasColor(color)}
-              className={`w-5 h-5 rounded-full border-2 transition-all ${
+              className={`w-4 h-4 rounded-full border-2 transition-all ${
                 canvasColor === color
                   ? "border-white ring-1 ring-white scale-110"
                   : "border-white/50 hover:border-white"
@@ -452,13 +452,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           ))}
         </div>
 
-        <div className="w-px h-5 bg-white/30 mx-1" />
+        <div className="w-px h-4 bg-white/30 mx-0.5 hidden sm:block" />
 
         {/* 缩放控制 - 白色圆角方形按钮 */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={() => setCanvasScale((prev) => Math.max(0.3, prev - 0.2))}
-            className="w-8 h-8 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
+            className="w-6 h-6 bg-white text-green-600 rounded-lg text-xs hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
             title="缩小"
           >
             −
@@ -468,7 +468,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           </span>
           <button
             onClick={() => setCanvasScale((prev) => Math.min(3, prev + 0.2))}
-            className="w-8 h-8 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
+            className="w-6 h-6 bg-white text-green-600 rounded-lg text-xs hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
             title="放大"
           >
             +
@@ -478,32 +478,32 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasScale(1);
               setCanvasOffset({ x: 0, y: 0 });
             }}
-            className="w-8 h-8 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm transition-colors"
+            className="w-6 h-6 bg-white text-green-600 rounded-lg text-xs hover:bg-green-50 flex items-center justify-center shadow-sm transition-colors"
             title="重置"
           >
             ⌂
           </button>
         </div>
 
-        <div className="w-px h-5 bg-white/30 mx-1" />
+        <div className="w-px h-4 bg-white/30 mx-0.5" />
 
         {/* 网格控制 - 唯一入口，去重 */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <label className="flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={snapToGrid}
               onChange={(e) => setSnapToGrid(e.target.checked)}
-              className="w-3.5 h-3.5 rounded accent-white"
+              className="w-3 h-3 rounded accent-white"
             />
             吸附
           </label>
-          <label className="flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-0.5 text-[10px] cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={showGrid}
               onChange={(e) => setShowGrid(e.target.checked)}
-              className="w-3.5 h-3.5 rounded accent-white"
+              className="w-3 h-3 rounded accent-white"
             />
             网格
           </label>
@@ -515,7 +515,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               max="100"
               value={gridSize}
               onChange={(e) => setGridSize(Number(e.target.value))}
-              className="w-16 h-1.5 accent-white"
+              className="w-12 h-1 accent-white"
             />
           </div>
         </div>
