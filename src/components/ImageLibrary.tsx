@@ -292,7 +292,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   };
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex text-[10px]">
       {/* 图库内容区域 */}
       <div
         className="h-full flex flex-col bg-white border-r border-gray-200"
