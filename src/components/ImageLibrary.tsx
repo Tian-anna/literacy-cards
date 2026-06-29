@@ -448,7 +448,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setSelectedImages(new Set());
                 }}
                 className="w-full px-2 py-1 border border-gray-300 rounded text-[10px] focus:outline-none focus:border-green-500"
-                style={{ fontSize: "10px" }}
+                style={{ fontSize: "10px", maxWidth: "100%" }}
               />
             </div>
 
