@@ -51,6 +51,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0 });
 
+  // 双指缩放相关
+  const pinchStartRef = useRef({ distance: 0, scale: 1 });
+  const isPinchingRef = useRef(false);
+  const pinchCenterRef = useRef({ x: 0, y: 0 });
+
   const presetColors = [
     "#e8e8e8",
     "#ffffff",
@@ -227,6 +232,23 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     let hasMoved = false;
 
     const onTouchStart = (e: TouchEvent) => {
+      // 双指缩放开始
+      if (e.touches.length === 2) {
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const distance = Math.hypot(
+          touch2.clientX - touch1.clientX,
+          touch2.clientY - touch1.clientY,
+        );
+        pinchStartRef.current = { distance, scale: canvasScale };
+        isPinchingRef.current = true;
+        pinchCenterRef.current = {
+          x: (touch1.clientX + touch2.clientX) / 2,
+          y: (touch1.clientY + touch2.clientY) / 2,
+        };
+        return;
+      }
+
       const touch = e.touches[0];
       const target = e.target as HTMLElement;
       if (target.closest(".placed-card")) return;
@@ -246,6 +268,25 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      // 双指缩放处理
+      if (e.touches.length === 2 && isPinchingRef.current) {
+        e.preventDefault();
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const distance = Math.hypot(
+          touch2.clientX - touch1.clientX,
+          touch2.clientY - touch1.clientY,
+        );
+
+        if (pinchStartRef.current.distance > 0) {
+          const scale =
+            (distance / pinchStartRef.current.distance) *
+            pinchStartRef.current.scale;
+          setCanvasScale(Math.max(0.3, Math.min(3, scale)));
+        }
+        return;
+      }
+
       const target = e.target as HTMLElement;
       if (!canvas.contains(target)) return;
 
@@ -290,6 +331,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchEnd = () => {
+      // 双指缩放结束
+      if (isPinchingRef.current) {
+        isPinchingRef.current = false;
+        pinchStartRef.current = { distance: 0, scale: 1 };
+        return;
+      }
+
       if (isTouchBoxSelectingRef.current) {
         setIsBoxSelecting(false);
         setSelectionBox(null);
@@ -300,7 +348,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     canvas.addEventListener("touchstart", onTouchStart, { passive: true });
-    canvas.addEventListener("touchmove", onTouchMove, { passive: true });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
     canvas.addEventListener("touchend", onTouchEnd, { passive: true });
     canvas.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
@@ -310,7 +358,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       canvas.removeEventListener("touchend", onTouchEnd);
       canvas.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [getCanvasPoint, getCardsInBox, clearSelection]);
+  }, [getCanvasPoint, getCardsInBox, clearSelection, canvasScale]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -486,7 +534,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         onWheel={handleWheel}
         style={{
           backgroundColor: canvasColor,
-          touchAction: "none",
+          touchAction: "pan-x pan-y pinch-zoom",
           userSelect: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",
