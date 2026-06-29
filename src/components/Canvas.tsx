@@ -521,7 +521,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         </div>
 
         {selectedIds.size > 0 && (
-          <span className="ml-auto text-[9px] font-medium bg-white/40 px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0">
+          <span className="ml-auto text-[9px] font-medium bg-white/100 px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0">
             已选 {selectedIds.size} 张
           </span>
         )}
