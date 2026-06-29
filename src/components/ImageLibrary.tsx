@@ -298,16 +298,17 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       className="h-full flex flex-col bg-white border-r border-gray-200 relative"
       style={{ width, minWidth: width, maxWidth: width, flexShrink: 0 }}
     >
-      {/* 拖拽调整宽度的手柄 */}
+      {/* 拖拽调整宽度的手柄 - 增强可点击区域和视觉反馈 */}
       <div
-        className="absolute right-0 top-0 bottom-0 w-5 cursor-col-resize z-50 flex items-center justify-center"
+        className="absolute right-0 top-0 bottom-0 w-6 cursor-col-resize z-[9999] flex items-center justify-center"
         onMouseDown={handleResizeStart}
         style={{ touchAction: "none" }}
       >
         <div
-          className="w-1.5 h-16 rounded-full transition-colors"
+          className="w-1.5 h-20 rounded-full transition-colors shadow-sm"
           style={{
-            background: isResizing ? "#3b82f6" : "#d1d5db",
+            background: isResizing ? "#3b82f6" : "#9ca3af",
+            boxShadow: isResizing ? "0 0 8px rgba(59,130,246,0.5)" : "none",
           }}
         />
       </div>
