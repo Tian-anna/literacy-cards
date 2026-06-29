@@ -47,8 +47,9 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isCleaning, setIsCleaning] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isResizing, setIsResizing] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 使用 useRef 而不是 useState 来跟踪拖拽状态，避免重渲染
+  const isResizingRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(width);
 
@@ -79,10 +80,10 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     fetchGithubCount();
   }, [fetchGithubCount]);
 
-  // 拖拽调整宽度 - 使用更可靠的方式
+  // 拖拽调整宽度 - 使用 useRef 避免重渲染
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
+      if (!isResizingRef.current) return;
       e.preventDefault();
       const deltaX = e.clientX - resizeStartXRef.current;
       const newWidth = Math.max(
@@ -93,25 +94,31 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     };
 
     const handleMouseUp = () => {
-      if (isResizing) {
-        setIsResizing(false);
+      if (isResizingRef.current) {
+        isResizingRef.current = false;
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
       }
     };
 
-    if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    }
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
 
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing, onWidthChange]);
+  }, [onWidthChange]);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = width;
+    isResizingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
 
   // 计算每个分类的图片数量
   const categoryCounts = useMemo(() => {
@@ -284,363 +291,355 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
-  const handleResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    resizeStartXRef.current = e.clientX;
-    resizeStartWidthRef.current = width;
-    setIsResizing(true);
-  };
-
   return (
-    <div
-      ref={containerRef}
-      className="h-full flex flex-col bg-white border-r border-gray-200 relative"
-      style={{ width, minWidth: width, maxWidth: width, flexShrink: 0 }}
-    >
-      {/* 拖拽调整宽度的手柄 - 增强可点击区域和视觉反馈 */}
+    <div className="h-full flex">
+      {/* 图库内容区域 */}
       <div
-        className="absolute right-0 top-0 bottom-0 w-6 cursor-col-resize z-[9999] flex items-center justify-center"
-        onMouseDown={handleResizeStart}
-        style={{ touchAction: "none" }}
+        className="h-full flex flex-col bg-white border-r border-gray-200"
+        style={{ width, minWidth: width, maxWidth: width, flexShrink: 0 }}
       >
-        <div
-          className="w-1.5 h-20 rounded-full transition-colors shadow-sm"
-          style={{
-            background: isResizing ? "#3b82f6" : "#9ca3af",
-            boxShadow: isResizing ? "0 0 8px rgba(59,130,246,0.5)" : "none",
-          }}
-        />
-      </div>
+        <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
+          >
+            <span>{isExpanded ? "▼" : "▶"}</span>
+            <span>图片图库</span>
+          </button>
+          <span className="text-xs text-gray-400">{images.length} 张</span>
+        </div>
 
-      <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
-        >
-          <span>{isExpanded ? "▼" : "▶"}</span>
-          <span>图片图库</span>
-        </button>
-        <span className="text-xs text-gray-400">{images.length} 张</span>
-      </div>
+        {isExpanded && (
+          <>
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>GitHub:</span>
+                {isLoadingGithubCount ? (
+                  <span className="animate-pulse">加载中...</span>
+                ) : githubCount !== null ? (
+                  <span className="text-green-600">{githubCount} 张</span>
+                ) : (
+                  <span className="text-red-400">获取失败</span>
+                )}
+              </div>
+            </div>
 
-      {isExpanded && (
-        <>
-          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>GitHub:</span>
-              {isLoadingGithubCount ? (
-                <span className="animate-pulse">加载中...</span>
-              ) : githubCount !== null ? (
-                <span className="text-green-600">{githubCount} 张</span>
-              ) : (
-                <span className="text-red-400">获取失败</span>
+            {/* 分类筛选 - 改为下拉选择 */}
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-gray-500">分类筛选</span>
+                <button
+                  onClick={() => setIsManagingCategories(!isManagingCategories)}
+                  className="text-xs text-blue-500 hover:text-blue-600"
+                >
+                  {isManagingCategories ? "完成" : "管理"}
+                </button>
+              </div>
+
+              <select
+                value={selectedCategory}
+                onChange={(e) => {
+                  setSelectedCategory(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500 bg-white"
+              >
+                {["全部", ...categories].map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat} ({categoryCounts[cat] || 0})
+                  </option>
+                ))}
+              </select>
+
+              {isManagingCategories && (
+                <div className="mt-2 p-2 bg-gray-50 rounded">
+                  <div className="flex gap-1 mb-2">
+                    <input
+                      type="text"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && handleAddCategory()
+                      }
+                      placeholder="新分类名称"
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500"
+                    />
+                    <button
+                      onClick={handleAddCategory}
+                      className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                    >
+                      添加
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {categories
+                      .filter((c) => c !== "未分类")
+                      .map((cat) => (
+                        <span
+                          key={cat}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded text-xs"
+                        >
+                          {cat}
+                          <button
+                            onClick={() => removeCategory(cat)}
+                            className="text-red-400 hover:text-red-600"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                  </div>
+                </div>
               )}
             </div>
-          </div>
 
-          {/* 分类筛选 - 改为下拉选择 */}
-          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-500">分类筛选</span>
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <button
-                onClick={() => setIsManagingCategories(!isManagingCategories)}
-                className="text-xs text-blue-500 hover:text-blue-600"
+                onClick={handleSyncFromGitHub}
+                disabled={isSyncing}
+                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
               >
-                {isManagingCategories ? "完成" : "管理"}
+                {isSyncing ? (
+                  <>
+                    <span className="animate-spin">↻</span>
+                    <span>同步中...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🔄</span>
+                    <span>从 GitHub 同步</span>
+                  </>
+                )}
               </button>
             </div>
 
-            <select
-              value={selectedCategory}
-              onChange={(e) => {
-                setSelectedCategory(e.target.value);
-                setPage(1);
-              }}
-              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500 bg-white"
-            >
-              {["全部", ...categories].map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat} ({categoryCounts[cat] || 0})
-                </option>
-              ))}
-            </select>
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+              <input
+                type="text"
+                placeholder="搜索图片..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                  setSelectedImages(new Set());
+                }}
+                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500"
+              />
+            </div>
 
-            {isManagingCategories && (
-              <div className="mt-2 p-2 bg-gray-50 rounded">
-                <div className="flex gap-1 mb-2">
-                  <input
-                    type="text"
-                    value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
-                    placeholder="新分类名称"
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500"
-                  />
-                  <button
-                    onClick={handleAddCategory}
-                    className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
-                  >
-                    添加
-                  </button>
+            <div className="flex-shrink-0 px-3 py-1 border-b border-gray-100 flex gap-2">
+              <button
+                onClick={() => handleSort("name")}
+                className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
+                  sortBy === "name"
+                    ? "bg-green-500 text-white"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                名称
+                {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+              </button>
+              <button
+                onClick={() => handleSort("date")}
+                className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
+                  sortBy === "date"
+                    ? "bg-green-500 text-white"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                日期
+                {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
+              </button>
+            </div>
+
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 flex gap-2">
+              <button
+                onClick={() => {
+                  setIsBatchMode(!isBatchMode);
+                  setSelectedImages(new Set());
+                }}
+                className={`flex-1 px-2 py-1 rounded text-xs ${
+                  isBatchMode
+                    ? "bg-orange-500 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {isBatchMode ? "退出多选" : "批量操作"}
+              </button>
+              <button
+                onClick={handleCleanInvalid}
+                disabled={isCleaning}
+                className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200 disabled:opacity-50"
+              >
+                {isCleaning ? "清理中..." : "清理无效"}
+              </button>
+            </div>
+
+            {isBatchMode && (
+              <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-500">
+                    已选 {selectedImages.size} 张
+                  </span>
+                  <div className="ml-auto flex gap-1">
+                    <button
+                      onClick={handleSelectAll}
+                      className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs hover:bg-blue-200"
+                    >
+                      全选
+                    </button>
+                    <button
+                      onClick={handleDeselectAll}
+                      className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleBatchDelete}
+                      disabled={selectedImages.size === 0}
+                      className="px-2 py-0.5 bg-red-500 text-white rounded text-xs disabled:opacity-50 hover:bg-red-600"
+                    >
+                      删除
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {categories
-                    .filter((c) => c !== "未分类")
-                    .map((cat) => (
-                      <span
-                        key={cat}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded text-xs"
-                      >
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-500">移到:</span>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value && selectedImages.size > 0) {
+                        handleBatchSetCategory(e.target.value);
+                      }
+                    }}
+                    disabled={selectedImages.size === 0}
+                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs disabled:opacity-50 focus:outline-none focus:border-green-500"
+                  >
+                    <option value="">选择分类...</option>
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>
                         {cat}
-                        <button
-                          onClick={() => removeCategory(cat)}
-                          className="text-red-400 hover:text-red-600"
-                        >
-                          ×
-                        </button>
-                      </span>
+                      </option>
                     ))}
+                  </select>
                 </div>
               </div>
             )}
-          </div>
 
-          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
-            <button
-              onClick={handleSyncFromGitHub}
-              disabled={isSyncing}
-              className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
+            <div
+              ref={scrollContainerRef}
+              className="flex-1 overflow-y-auto p-2"
+              style={{
+                WebkitOverflowScrolling: "touch",
+                overscrollBehavior: "contain",
+              }}
             >
-              {isSyncing ? (
-                <>
-                  <span className="animate-spin">↻</span>
-                  <span>同步中...</span>
-                </>
+              {totalCount === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-sm">
+                  {searchTerm
+                    ? "无结果"
+                    : "暂无图片，点击 🔄 同步从 GitHub 加载"}
+                </div>
               ) : (
                 <>
-                  <span>🔄</span>
-                  <span>从 GitHub 同步</span>
-                </>
-              )}
-            </button>
-          </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {paginatedImages.map((image) => (
+                      <div
+                        key={image.id}
+                        className={`relative aspect-square rounded-md overflow-hidden border-2 cursor-pointer transition-all hover:shadow-md ${
+                          isBatchMode && selectedImages.has(image.id)
+                            ? "border-green-500 ring-2 ring-green-300"
+                            : "border-gray-200 hover:border-green-300"
+                        }`}
+                        onClick={() => handleImageClick(image.id)}
+                      >
+                        <div className="w-full h-full bg-gray-50 flex items-center justify-center">
+                          {image.src ? (
+                            <img
+                              src={image.src}
+                              alt={image.name}
+                              className="w-full h-full object-cover pointer-events-none"
+                              draggable={false}
+                              loading="lazy"
+                              onError={(e) => {
+                                console.error(
+                                  "图片加载失败:",
+                                  image.id,
+                                  image.name,
+                                  image.src,
+                                );
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  parent.innerHTML = `
+                                    <div class="flex items-center justify-center w-full h-full text-xs text-gray-400 bg-gray-100">
+                                      ${image.name || "?"}
+                                    </div>
+                                  `;
+                                }
+                              }}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center w-full h-full text-xs text-gray-400 bg-gray-100">
+                              {image.name || "?"}
+                            </div>
+                          )}
+                        </div>
 
-          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
-            <input
-              type="text"
-              placeholder="搜索图片..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-                setSelectedImages(new Set());
-              }}
-              className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500"
-            />
-          </div>
-
-          <div className="flex-shrink-0 px-3 py-1 border-b border-gray-100 flex gap-2">
-            <button
-              onClick={() => handleSort("name")}
-              className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
-                sortBy === "name"
-                  ? "bg-green-500 text-white"
-                  : "bg-gray-100 text-gray-600"
-              }`}
-            >
-              名称
-              {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
-            </button>
-            <button
-              onClick={() => handleSort("date")}
-              className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
-                sortBy === "date"
-                  ? "bg-green-500 text-white"
-                  : "bg-gray-100 text-gray-600"
-              }`}
-            >
-              日期
-              {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
-            </button>
-          </div>
-
-          <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 flex gap-2">
-            <button
-              onClick={() => {
-                setIsBatchMode(!isBatchMode);
-                setSelectedImages(new Set());
-              }}
-              className={`flex-1 px-2 py-1 rounded text-xs ${
-                isBatchMode
-                  ? "bg-orange-500 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              {isBatchMode ? "退出多选" : "批量操作"}
-            </button>
-            <button
-              onClick={handleCleanInvalid}
-              disabled={isCleaning}
-              className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200 disabled:opacity-50"
-            >
-              {isCleaning ? "清理中..." : "清理无效"}
-            </button>
-          </div>
-
-          {isBatchMode && (
-            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1.5">
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500">
-                  已选 {selectedImages.size} 张
-                </span>
-                <div className="ml-auto flex gap-1">
-                  <button
-                    onClick={handleSelectAll}
-                    className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs hover:bg-blue-200"
-                  >
-                    全选
-                  </button>
-                  <button
-                    onClick={handleDeselectAll}
-                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleBatchDelete}
-                    disabled={selectedImages.size === 0}
-                    className="px-2 py-0.5 bg-red-500 text-white rounded text-xs disabled:opacity-50 hover:bg-red-600"
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500">移到:</span>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value && selectedImages.size > 0) {
-                      handleBatchSetCategory(e.target.value);
-                    }
-                  }}
-                  disabled={selectedImages.size === 0}
-                  className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs disabled:opacity-50 focus:outline-none focus:border-green-500"
-                >
-                  <option value="">选择分类...</option>
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
-          <div
-            ref={scrollContainerRef}
-            className="flex-1 overflow-y-auto p-2"
-            style={{
-              WebkitOverflowScrolling: "touch",
-              overscrollBehavior: "contain",
-            }}
-          >
-            {totalCount === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">
-                {searchTerm ? "无结果" : "暂无图片，点击 🔄 同步从 GitHub 加载"}
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {paginatedImages.map((image) => (
-                    <div
-                      key={image.id}
-                      className={`relative aspect-square rounded-md overflow-hidden border-2 cursor-pointer transition-all hover:shadow-md ${
-                        isBatchMode && selectedImages.has(image.id)
-                          ? "border-green-500 ring-2 ring-green-300"
-                          : "border-gray-200 hover:border-green-300"
-                      }`}
-                      onClick={() => handleImageClick(image.id)}
-                    >
-                      <div className="w-full h-full bg-gray-50 flex items-center justify-center">
-                        {image.src ? (
-                          <img
-                            src={image.src}
-                            alt={image.name}
-                            className="w-full h-full object-cover pointer-events-none"
-                            draggable={false}
-                            loading="lazy"
-                            onError={(e) => {
-                              console.error(
-                                "图片加载失败:",
-                                image.id,
-                                image.name,
-                                image.src,
-                              );
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = "none";
-                              const parent = target.parentElement;
-                              if (parent) {
-                                parent.innerHTML = `
-                                  <div class="flex items-center justify-center w-full h-full text-xs text-gray-400 bg-gray-100">
-                                    ${image.name || "?"}
-                                  </div>
-                                `;
-                              }
-                            }}
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center w-full h-full text-xs text-gray-400 bg-gray-100">
-                            {image.name || "?"}
+                        {/* 批量选择标记 */}
+                        {isBatchMode && selectedImages.has(image.id) && (
+                          <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white text-xs shadow-sm">
+                            ✓
                           </div>
                         )}
-                      </div>
 
-                      {/* 批量选择标记 */}
-                      {isBatchMode && selectedImages.has(image.id) && (
-                        <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white text-xs shadow-sm">
-                          ✓
+                        {/* 删除按钮 */}
+                        {!isBatchMode && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`确定删除"${image.name}"吗？`)) {
+                                removeImage(image.id);
+                              }
+                            }}
+                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500/80 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-xs opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
+                            style={{ zIndex: 10 }}
+                          >
+                            ×
+                          </button>
+                        )}
+
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate text-center">
+                          {image.name}
                         </div>
-                      )}
-
-                      {/* 删除按钮 */}
-                      {!isBatchMode && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(`确定删除"${image.name}"吗？`)) {
-                              removeImage(image.id);
-                            }
-                          }}
-                          className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500/80 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-xs opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
-                          style={{ zIndex: 10 }}
-                        >
-                          ×
-                        </button>
-                      )}
-
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate text-center">
-                        {image.name}
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
-                {hasMore && (
-                  <button
-                    onClick={() => setPage((p) => p + 1)}
-                    className="w-full mt-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                  >
-                    加载更多 ({page}/{totalPages})
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </>
-      )}
+                  {hasMore && (
+                    <button
+                      onClick={() => setPage((p) => p + 1)}
+                      className="w-full mt-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                    >
+                      加载更多 ({page}/{totalPages})
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* 独立的拖拽手柄 - 在 flex 布局中作为独立元素 */}
+      <div
+        className="h-full w-4 cursor-col-resize flex items-center justify-center hover:bg-blue-100 transition-colors flex-shrink-0"
+        onMouseDown={handleResizeStart}
+        style={{ touchAction: "none" }}
+      >
+        <div className="w-1 h-16 bg-gray-400 rounded-full" />
+      </div>
     </div>
   );
 };
