@@ -404,8 +404,13 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           </button>
           <button
             className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-red-600 active:bg-red-700"
-            onClick={(e) => handleDelete(e)}
-            onTouchStart={handleDelete}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const { removeCard } = useStore.getState();
+              removeCard(card.instanceId);
+              setShowControls(false);
+            }}
             title="删除"
           >
             ×
