@@ -304,7 +304,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
   useEffect(() => {
     if (!showControls) return;
 
-    const handleClick = (e: MouseEvent) => {
+    const handleClick = (e: MouseEvent | TouchEvent) => {
       if (!cardRef.current?.contains(e.target as Node)) {
         setShowControls(false);
       }
@@ -320,7 +320,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
   }, [showControls]);
 
   const handleDelete = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
+    (e: any) => {
       e.stopPropagation();
       const { removeCard } = useStore.getState();
       removeCard(card.instanceId);
@@ -330,7 +330,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
   );
 
   const handleRotate = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
+    (e: any) => {
       e.stopPropagation();
       updateCard(card.instanceId, {
         rotation: (card.rotation + 15) % 360,
@@ -397,9 +397,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           <button
             className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-blue-600 active:bg-blue-700"
             onClick={(e) => handleRotate(e)}
-            onTouchStart={(e) =>
-              handleRotate(e as unknown as React.MouseEvent | React.TouchEvent)
-            }
+            onTouchStart={handleRotate}
             title="旋转"
           >
             ↻
@@ -407,9 +405,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           <button
             className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-red-600 active:bg-red-700"
             onClick={(e) => handleDelete(e)}
-            onTouchStart={(e) =>
-              handleDelete(e as unknown as React.MouseEvent | React.TouchEvent)
-            }
+            onTouchStart={handleDelete}
             title="删除"
           >
             ×
