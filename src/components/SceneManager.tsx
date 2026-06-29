@@ -60,7 +60,7 @@ const SceneManager: React.FC = () => {
       {/* 添加图片按钮 - 白色圆角方形 */}
       <button
         onClick={() => document.getElementById("file-upload")?.click()}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px]"
       >
         <span>📁</span>
         <span>添加</span>
@@ -71,7 +71,7 @@ const SceneManager: React.FC = () => {
         onClick={() => {
           if (confirm("确定清空画布吗？")) clearCanvas();
         }}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px]"
       >
         <span>🗑</span>
         <span>清空</span>
@@ -81,7 +81,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={handleSaveScene}
         disabled={!currentSceneId}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px]"
       >
         <span>💾</span>
         <span>保存</span>
@@ -91,7 +91,7 @@ const SceneManager: React.FC = () => {
       <div className="relative">
         <button
           onClick={() => setShowScenes(!showScenes)}
-          className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
+          className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px]"
         >
           <span>📂</span>
           <span>场景</span>
@@ -152,7 +152,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={handleExport}
         disabled={!currentSceneId}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-[10px]"
       >
         导出
       </button>
@@ -160,7 +160,7 @@ const SceneManager: React.FC = () => {
       {/* 导入按钮 */}
       <button
         onClick={() => setShowImport(true)}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-[10px]"
       >
         导入
       </button>
@@ -169,7 +169,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={undo}
         disabled={!canUndo}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-[10px]"
         title="撤销"
       >
         ↩️
@@ -177,7 +177,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={redo}
         disabled={!canRedo}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-[10px]"
         title="重做"
       >
         ↪️
