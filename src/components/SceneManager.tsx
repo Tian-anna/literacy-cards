@@ -56,7 +56,7 @@ const SceneManager: React.FC = () => {
   };
 
   return (
-    <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-sm flex-wrap">
+    <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-[10px] flex-wrap">
       {/* 添加图片按钮 - 白色圆角方形 */}
       <button
         onClick={() => document.getElementById("file-upload")?.click()}
@@ -103,7 +103,7 @@ const SceneManager: React.FC = () => {
               <input
                 type="text"
                 placeholder="新场景名称"
-                className="flex-1 border rounded px-2 py-1 text-sm"
+                className="flex-1 border rounded px-2 py-1 text-[10px]"
                 value={newSceneName}
                 onChange={(e) => setNewSceneName(e.target.value)}
               />
@@ -114,7 +114,7 @@ const SceneManager: React.FC = () => {
                     setNewSceneName("");
                   }
                 }}
-                className="bg-green-500 text-white px-2 py-1 rounded text-sm hover:bg-green-600"
+                className="bg-green-500 text-white px-2 py-1 rounded text-[10px] hover:bg-green-600"
               >
                 +
               </button>
@@ -131,13 +131,13 @@ const SceneManager: React.FC = () => {
                   }`}
                   onClick={() => loadScene(scene.id)}
                 >
-                  <span className="text-sm">{scene.name}</span>
+                  <span className="text-[10px]">{scene.name}</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteScene(scene.id);
                     }}
-                    className="text-red-500 hover:bg-red-50 px-1 rounded text-sm"
+                    className="text-red-500 hover:bg-red-50 px-1 rounded text-[10px]"
                   >
                     ×
                   </button>
@@ -189,7 +189,7 @@ const SceneManager: React.FC = () => {
           <div className="bg-white rounded-xl p-6 w-96 max-w-[90%] text-gray-800">
             <h3 className="font-bold text-lg mb-4">导入场景</h3>
             <textarea
-              className="w-full h-32 border rounded-lg p-3 text-sm mb-4"
+              className="w-full h-32 border rounded-lg p-3 text-[10px] mb-4"
               placeholder="粘贴场景JSON数据..."
               value={importData}
               onChange={(e) => setImportData(e.target.value)}
