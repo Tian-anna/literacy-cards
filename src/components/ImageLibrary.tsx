@@ -623,13 +623,28 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     ))}
                   </div>
 
-                  {hasMore && (
-                    <button
-                      onClick={() => setPage((p) => p + 1)}
-                      className="w-full mt-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                    >
-                      加载更多 ({page}/{totalPages})
-                    </button>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-2 py-1.5">
+                      <button
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page <= 1}
+                        className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        ← 上一页
+                      </button>
+                      <span className="text-xs text-gray-500">
+                        {page} / {totalPages}
+                      </span>
+                      <button
+                        onClick={() =>
+                          setPage((p) => Math.min(totalPages, p + 1))
+                        }
+                        disabled={page >= totalPages}
+                        className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        下一页 →
+                      </button>
+                    </div>
                   )}
                 </>
               )}
