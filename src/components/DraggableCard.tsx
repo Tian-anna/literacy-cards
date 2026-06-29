@@ -26,12 +26,15 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
 
   const [isDragging, setIsDraggingLocal] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(true);
+  const [showControls, setShowControls] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef({ x: 0, y: 0, cardX: 0, cardY: 0 });
   const initialPositionsRef = useRef<Map<string, { x: number; y: number }>>(
     new Map(),
   );
   const isTouchDraggingRef = useRef(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPressRef = useRef(false);
 
   const image = images.find((img) => img.id === card.imageId);
   if (!image) {
@@ -145,6 +148,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     let hasMoved = false;
 
     const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+
       e.preventDefault();
       e.stopPropagation();
 
@@ -154,6 +159,17 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       touchStartTime = Date.now();
       hasMoved = false;
       isTouchDraggingRef.current = false;
+      isLongPressRef.current = false;
+
+      // 长按检测（500ms）
+      longPressTimerRef.current = setTimeout(() => {
+        isLongPressRef.current = true;
+        setShowControls(true);
+        // 震动反馈（如果支持）
+        if (navigator.vibrate) {
+          navigator.vibrate(50);
+        }
+      }, 500);
 
       const store = useStore.getState();
       initialPositionsRef.current = new Map();
@@ -172,12 +188,22 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+
       e.preventDefault();
       e.stopPropagation();
 
       const touch = e.touches[0];
       const dx = (touch.clientX - dragStartRef.current.x) / canvasScale;
       const dy = (touch.clientY - dragStartRef.current.y) / canvasScale;
+
+      // 如果移动超过 10px，取消长按
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+      }
 
       if (
         !isTouchDraggingRef.current &&
@@ -217,13 +243,20 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     };
 
     const onTouchEnd = (e: TouchEvent) => {
+      // 清除长按定时器
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+
       const touchDuration = Date.now() - touchStartTime;
 
       if (isTouchDraggingRef.current) {
         setIsDraggingLocal(false);
         setIsDragging(false);
         useStore.getState().saveHistory();
-      } else if (touchDuration < 300 && !hasMoved) {
+      } else if (touchDuration < 300 && !hasMoved && !isLongPressRef.current) {
+        // 短点击 - 切换选中
         e.preventDefault();
         const store = useStore.getState();
         if (
@@ -237,6 +270,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       }
 
       isTouchDraggingRef.current = false;
+      isLongPressRef.current = false;
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: false });
@@ -249,6 +283,9 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchEnd);
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+      }
     };
   }, [
     card.instanceId,
@@ -262,6 +299,45 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     setIsDragging,
     canvasScale,
   ]);
+
+  // 点击其他地方隐藏控制按钮
+  useEffect(() => {
+    if (!showControls) return;
+
+    const handleClick = (e: MouseEvent) => {
+      if (!cardRef.current?.contains(e.target as Node)) {
+        setShowControls(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("touchstart", handleClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("touchstart", handleClick);
+    };
+  }, [showControls]);
+
+  const handleDelete = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.stopPropagation();
+      const { removeCard } = useStore.getState();
+      removeCard(card.instanceId);
+      setShowControls(false);
+    },
+    [card.instanceId],
+  );
+
+  const handleRotate = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.stopPropagation();
+      updateCard(card.instanceId, {
+        rotation: (card.rotation + 15) % 360,
+      });
+    },
+    [card.instanceId, card.rotation, updateCard],
+  );
 
   return (
     <div
@@ -289,7 +365,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       onMouseDown={handleMouseDown}
     >
       {isSelected && selectedIds.size > 1 && (
-        <div className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-xs z-10">
+        <div className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-[9px] z-10">
           {selectedIds.size}
         </div>
       )}
@@ -306,36 +382,41 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           }}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 bg-gray-100 rounded-lg">
+        <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 bg-gray-100 rounded-lg">
           {image.name || "?"}
         </div>
       )}
 
-      {isSelected && (
-        <div className="absolute -top-8 left-1/2 -translate-x-1/2 flex gap-1">
+      {/* 控制按钮 - 选中或长按显示 */}
+      {(isSelected || showControls) && (
+        <div
+          className="absolute -top-7 left-1/2 -translate-x-1/2 flex gap-1 z-20"
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
           <button
-            className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs shadow-md hover:bg-blue-600"
-            onClick={(e) => {
-              e.stopPropagation();
-              updateCard(card.instanceId, {
-                rotation: (card.rotation + 15) % 360,
-              });
-            }}
+            className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-blue-600 active:bg-blue-700"
+            onClick={handleRotate}
+            onTouchStart={handleRotate}
             title="旋转"
           >
             ↻
           </button>
           <button
-            className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs shadow-md hover:bg-red-600"
-            onClick={(e) => {
-              e.stopPropagation();
-              const { removeCard } = useStore.getState();
-              removeCard(card.instanceId);
-            }}
+            className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md hover:bg-red-600 active:bg-red-700"
+            onClick={handleDelete}
+            onTouchStart={handleDelete}
             title="删除"
           >
             ×
           </button>
+        </div>
+      )}
+
+      {/* 长按提示 */}
+      {showControls && !isSelected && (
+        <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[8px] text-gray-500 whitespace-nowrap">
+          长按菜单
         </div>
       )}
     </div>
