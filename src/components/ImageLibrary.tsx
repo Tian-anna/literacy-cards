@@ -101,7 +101,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       }
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mousemove", handleMouseMove, { passive: false });
     window.addEventListener("mouseup", handleMouseUp);
 
     return () => {
