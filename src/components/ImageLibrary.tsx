@@ -105,6 +105,15 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     };
   }, [isResizing, onWidthChange]);
 
+  // 计算每个分类的图片数量
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { 全部: images.length };
+    categories.forEach((cat) => {
+      counts[cat] = images.filter((img) => img.category === cat).length;
+    });
+    return counts;
+  }, [images, categories]);
+
   const filteredImages = useMemo(() => {
     let result = [...images];
 
@@ -128,7 +137,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       });
     } else {
       result.sort((a, b) => {
-        const cmp = b.createdAt - a.createdAt;
+        const cmp = (b.createdAt || 0) - (a.createdAt || 0);
         return sortOrder === "asc" ? -cmp : cmp;
       });
     }
@@ -343,6 +352,9 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   }`}
                 >
                   {cat}
+                  <span className="ml-1 opacity-70">
+                    ({categoryCounts[cat] || 0})
+                  </span>
                 </button>
               ))}
             </div>
@@ -497,18 +509,25 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   </button>
                 </div>
               </div>
-              <div className="flex items-center gap-1 flex-wrap">
+              <div className="flex items-center gap-1">
                 <span className="text-xs text-gray-500">移到:</span>
-                {categories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => handleBatchSetCategory(cat)}
-                    disabled={selectedImages.size === 0}
-                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs disabled:opacity-50 hover:bg-gray-200"
-                  >
-                    {cat}
-                  </button>
-                ))}
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value && selectedImages.size > 0) {
+                      handleBatchSetCategory(e.target.value);
+                    }
+                  }}
+                  disabled={selectedImages.size === 0}
+                  className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs disabled:opacity-50 focus:outline-none focus:border-green-500"
+                >
+                  <option value="">选择分类...</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           )}

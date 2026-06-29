@@ -36,6 +36,10 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     undo,
     redo,
     selectAll,
+    setShowGrid,
+    setGridSize,
+    setSnapToGrid,
+    snapToGrid,
   } = useStore();
 
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
@@ -102,8 +106,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
   const handleCanvasMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // 使用 e.buttons 判断鼠标按键，避免 e.button 类型问题
-      // e.buttons: 1=左键, 2=右键, 4=中键
       const buttons = e.buttons;
 
       // 中键(4)或左键(1)+Alt = 平移画布
@@ -116,7 +118,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         return;
       }
 
-      // 只处理左键
       if (buttons !== 1) return;
 
       const target = e.target as HTMLElement;
@@ -138,13 +139,34 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     [getCanvasPoint, clearSelection, canvasOffset],
   );
 
-  // 滚轮缩放
+  // 滚轮缩放 - 阻止浏览器默认缩放
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
+      e.stopPropagation();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
       setCanvasScale((prev) => Math.max(0.3, Math.min(3, prev + delta)));
     }
+  }, []);
+
+  // 阻止 Ctrl+滚轮的浏览器默认行为
+  useEffect(() => {
+    const preventBrowserZoom = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.addEventListener("wheel", preventBrowserZoom, { passive: false });
+    }
+
+    return () => {
+      if (canvas) {
+        canvas.removeEventListener("wheel", preventBrowserZoom);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -330,7 +352,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         clearSelection();
       }
 
-      // 画布缩放快捷键
       if ((e.ctrlKey || e.metaKey) && e.key === "+") {
         e.preventDefault();
         setCanvasScale((prev) => Math.min(3, prev + 0.2));
@@ -361,36 +382,38 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
   return (
     <div className="w-full h-full flex flex-col relative">
-      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-white/80 backdrop-blur border-b border-gray-200 z-10">
-        <span className="text-xs text-gray-500">画布颜色:</span>
+      {/* 绿色菜单栏 - 参考图3样式 */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-green-500 text-white z-10">
+        <span className="text-xs font-medium">画布颜色:</span>
         <div className="flex items-center gap-1">
           {presetColors.map((color) => (
             <button
               key={color}
               onClick={() => setCanvasColor(color)}
-              className={`w-5 h-5 rounded-full border-2 ${canvasColor === color ? "border-gray-800" : "border-gray-300"}`}
+              className={`w-5 h-5 rounded-full border-2 ${canvasColor === color ? "border-white ring-1 ring-white" : "border-transparent"}`}
               style={{ backgroundColor: color }}
+              title={color}
             />
           ))}
         </div>
-        <span className="text-xs text-gray-400 ml-2">{canvasColor}</span>
+        <span className="text-xs opacity-80 ml-1">{canvasColor}</span>
 
-        {/* 缩放控制 */}
-        <div className="flex items-center gap-1 ml-4">
+        {/* 缩放控制 - 白色圆角按钮 */}
+        <div className="flex items-center gap-1.5 ml-4">
           <button
             onClick={() => setCanvasScale((prev) => Math.max(0.3, prev - 0.2))}
-            className="w-6 h-6 bg-gray-100 rounded text-xs hover:bg-gray-200 flex items-center justify-center"
-            title="缩小 Ctrl+-"
+            className="w-7 h-7 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm font-bold"
+            title="缩小"
           >
             −
           </button>
-          <span className="text-xs text-gray-600 w-12 text-center">
+          <span className="text-xs font-medium w-12 text-center">
             {Math.round(canvasScale * 100)}%
           </span>
           <button
             onClick={() => setCanvasScale((prev) => Math.min(3, prev + 0.2))}
-            className="w-6 h-6 bg-gray-100 rounded text-xs hover:bg-gray-200 flex items-center justify-center"
-            title="放大 Ctrl++"
+            className="w-7 h-7 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm font-bold"
+            title="放大"
           >
             +
           </button>
@@ -399,15 +422,46 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasScale(1);
               setCanvasOffset({ x: 0, y: 0 });
             }}
-            className="w-6 h-6 bg-gray-100 rounded text-xs hover:bg-gray-200 flex items-center justify-center"
-            title="重置 Ctrl+0"
+            className="w-7 h-7 bg-white text-green-600 rounded-lg text-sm hover:bg-green-50 flex items-center justify-center shadow-sm"
+            title="重置"
           >
             ⌂
           </button>
         </div>
 
+        {/* 网格控制 */}
+        <div className="flex items-center gap-2 ml-4">
+          <label className="flex items-center gap-1 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={snapToGrid}
+              onChange={(e) => setSnapToGrid(e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-white"
+            />
+            吸附
+          </label>
+          <label className="flex items-center gap-1 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showGrid}
+              onChange={(e) => setShowGrid(e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-white"
+            />
+            网格
+          </label>
+          <input
+            type="range"
+            min="10"
+            max="100"
+            value={gridSize}
+            onChange={(e) => setGridSize(Number(e.target.value))}
+            className="w-16 h-1.5"
+          />
+          <span className="text-xs w-8">{gridSize}</span>
+        </div>
+
         {selectedIds.size > 0 && (
-          <span className="ml-auto text-xs text-green-600 font-medium">
+          <span className="ml-auto text-xs font-medium bg-white/20 px-2 py-0.5 rounded">
             已选 {selectedIds.size} 张
           </span>
         )}
@@ -448,10 +502,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               className="absolute inset-0 pointer-events-none"
               style={{
                 backgroundImage:
-                  "linear-gradient(to right, #999 1px, transparent 1px), linear-gradient(to bottom, #999 1px, transparent 1px)",
+                  "linear-gradient(to right, rgba(0,0,0,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.08) 1px, transparent 1px)",
                 backgroundSize: `${gridSize}px ${gridSize}px`,
                 zIndex: 0,
-                opacity: 0.3,
               }}
             />
           )}
@@ -480,17 +533,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         {placedCards.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center">
-              <p className="text-sm opacity-30" style={{ color: "#666" }}>
-                从左侧图库点击图片添加到画布
+              <p className="text-lg text-gray-400 mb-2">👆</p>
+              <p className="text-sm text-gray-400">点击下方图库选择图片</p>
+              <p className="text-xs text-gray-300 mt-1">
+                拖拽移动 · 双指缩放 · 双指旋转
               </p>
-              <div
-                className="mt-2 text-xs opacity-20"
-                style={{ color: "#666" }}
-              >
-                <p>Ctrl+点击 多选 | Shift+点击 范围选</p>
-                <p>拖拽空白处框选 | Ctrl+A 全选</p>
-                <p>Ctrl+滚轮 缩放画布 | Alt+拖拽 平移</p>
-              </div>
             </div>
           </div>
         )}
