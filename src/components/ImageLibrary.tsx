@@ -80,7 +80,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     fetchGithubCount();
   }, [fetchGithubCount]);
 
-  // 拖拽调整宽度 - 使用 useRef 避免重渲染
+  // 拖拽调整宽度 - 支持鼠标和触摸事件
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current) return;
@@ -93,7 +93,19 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       onWidthChange?.(newWidth);
     };
 
-    const handleMouseUp = () => {
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isResizingRef.current) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - resizeStartXRef.current;
+      const newWidth = Math.max(
+        MIN_WIDTH,
+        Math.min(MAX_WIDTH, resizeStartWidthRef.current + deltaX),
+      );
+      onWidthChange?.(newWidth);
+    };
+
+    const handleEnd = () => {
       if (isResizingRef.current) {
         isResizingRef.current = false;
         document.body.style.cursor = "";
@@ -102,11 +114,15 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     };
 
     window.addEventListener("mousemove", handleMouseMove, { passive: false });
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("mouseup", handleEnd);
+    window.addEventListener("touchend", handleEnd);
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("mouseup", handleEnd);
+      window.removeEventListener("touchend", handleEnd);
     };
   }, [onWidthChange]);
 
@@ -114,6 +130,15 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     e.preventDefault();
     e.stopPropagation();
     resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = width;
+    isResizingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const handleTouchResizeStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    resizeStartXRef.current = touch.clientX;
     resizeStartWidthRef.current = width;
     isResizingRef.current = true;
     document.body.style.cursor = "col-resize";
@@ -161,12 +186,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   }, [images, selectedCategory, searchTerm, sortBy, sortOrder]);
 
   const totalCount = filteredImages.length;
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
   const paginatedImages = filteredImages.slice(
     (page - 1) * ITEMS_PER_PAGE,
     page * ITEMS_PER_PAGE,
   );
-  const hasMore = page < totalPages;
 
   const handleSort = (type: "name" | "date") => {
     if (sortBy === type) {
@@ -292,7 +316,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   };
 
   return (
-    <div className="h-full flex text-[8px]">
+    <div className="h-full flex text-[10px]">
       {/* 图库内容区域 */}
       <div
         className="h-full flex flex-col bg-white border-r border-gray-200"
@@ -306,13 +330,13 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             <span>{isExpanded ? "▼" : "▶"}</span>
             <span>图片图库</span>
           </button>
-          <span className="text-[10px] text-gray-400">{images.length} 张</span>
+          <span className="text-[9px] text-gray-400">{images.length} 张</span>
         </div>
 
         {isExpanded && (
           <>
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
-              <div className="flex items-center justify-between text-[10px] text-gray-500">
+              <div className="flex items-center justify-between text-[9px] text-gray-500">
                 <span>GitHub:</span>
                 {isLoadingGithubCount ? (
                   <span className="animate-pulse">加载中...</span>
@@ -327,10 +351,10 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             {/* 分类筛选 - 改为下拉选择 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-gray-500">分类筛选</span>
+                <span className="text-[9px] text-gray-500">分类筛选</span>
                 <button
                   onClick={() => setIsManagingCategories(!isManagingCategories)}
-                  className="text-[10px] text-blue-500 hover:text-blue-600"
+                  className="text-[9px] text-blue-500 hover:text-blue-600"
                 >
                   {isManagingCategories ? "完成" : "管理"}
                 </button>
@@ -424,13 +448,14 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setSelectedImages(new Set());
                 }}
                 className="w-full px-2 py-1 border border-gray-300 rounded text-[10px] focus:outline-none focus:border-green-500"
+                style={{ fontSize: "16px" }}
               />
             </div>
 
             <div className="flex-shrink-0 px-3 py-1 border-b border-gray-100 flex gap-2">
               <button
                 onClick={() => handleSort("name")}
-                className={`text-[10px] px-2 py-0.5 rounded flex items-center gap-1 ${
+                className={`text-[9px] px-2 py-0.5 rounded flex items-center gap-1 ${
                   sortBy === "name"
                     ? "bg-green-500 text-white"
                     : "bg-gray-100 text-gray-600"
@@ -441,7 +466,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </button>
               <button
                 onClick={() => handleSort("date")}
-                className={`text-[10px] px-2 py-0.5 rounded flex items-center gap-1 ${
+                className={`text-[9px] px-2 py-0.5 rounded flex items-center gap-1 ${
                   sortBy === "date"
                     ? "bg-green-500 text-white"
                     : "bg-gray-100 text-gray-600"
@@ -458,7 +483,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setIsBatchMode(!isBatchMode);
                   setSelectedImages(new Set());
                 }}
-                className={`flex-1 px-2 py-1 rounded text-[10px] ${
+                className={`flex-1 px-2 py-1 rounded text-[9px] ${
                   isBatchMode
                     ? "bg-orange-500 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -469,7 +494,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               <button
                 onClick={handleCleanInvalid}
                 disabled={isCleaning}
-                className="px-2 py-1 bg-red-100 text-red-600 rounded text-[10px] hover:bg-red-200 disabled:opacity-50"
+                className="px-2 py-1 bg-red-100 text-red-600 rounded text-[9px] hover:bg-red-200 disabled:opacity-50"
               >
                 {isCleaning ? "清理中..." : "清理无效"}
               </button>
@@ -478,33 +503,33 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             {isBatchMode && (
               <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1.5">
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-gray-500">
+                  <span className="text-[9px] text-gray-500">
                     已选 {selectedImages.size} 张
                   </span>
                   <div className="ml-auto flex gap-1">
                     <button
                       onClick={handleSelectAll}
-                      className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px] hover:bg-blue-200"
+                      className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-[9px] hover:bg-blue-200"
                     >
                       全选
                     </button>
                     <button
                       onClick={handleDeselectAll}
-                      className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] hover:bg-gray-200"
+                      className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[9px] hover:bg-gray-200"
                     >
                       取消
                     </button>
                     <button
                       onClick={handleBatchDelete}
                       disabled={selectedImages.size === 0}
-                      className="px-2 py-0.5 bg-red-500 text-white rounded text-[10px] disabled:opacity-50 hover:bg-red-600"
+                      className="px-2 py-0.5 bg-red-500 text-white rounded text-[9px] disabled:opacity-50 hover:bg-red-600"
                     >
                       删除
                     </button>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-gray-500">移到:</span>
+                  <span className="text-[9px] text-gray-500">移到:</span>
                   <select
                     value=""
                     onChange={(e) => {
@@ -513,7 +538,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       }
                     }}
                     disabled={selectedImages.size === 0}
-                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] disabled:opacity-50 focus:outline-none focus:border-green-500"
+                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[9px] disabled:opacity-50 focus:outline-none focus:border-green-500"
                   >
                     <option value="">选择分类...</option>
                     {categories.map((cat) => (
@@ -546,7 +571,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     className="grid gap-1.5"
                     style={{
                       gridTemplateColumns:
-                        "repeat(auto-fit, minmax(40px, 1fr))",
+                        "repeat(auto-fit, minmax(45px, 1fr))",
                     }}
                   >
                     {paginatedImages.map((image) => (
@@ -579,7 +604,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                                 const parent = target.parentElement;
                                 if (parent) {
                                   parent.innerHTML = `
-                                    <div class="flex items-center justify-center w-full h-full text-[10px] text-gray-400 bg-gray-100">
+                                    <div class="flex items-center justify-center w-full h-full text-[9px] text-gray-400 bg-gray-100">
                                       ${image.name || "?"}
                                     </div>
                                   `;
@@ -587,7 +612,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                               }}
                             />
                           ) : (
-                            <div className="flex items-center justify-center w-full h-full text-[10px] text-gray-400 bg-gray-100">
+                            <div className="flex items-center justify-center w-full h-full text-[9px] text-gray-400 bg-gray-100">
                               {image.name || "?"}
                             </div>
                           )}
@@ -595,7 +620,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
 
                         {/* 批量选择标记 */}
                         {isBatchMode && selectedImages.has(image.id) && (
-                          <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white text-[10px] shadow-sm">
+                          <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white text-[9px] shadow-sm">
                             ✓
                           </div>
                         )}
@@ -609,14 +634,14 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                                 removeImage(image.id);
                               }
                             }}
-                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500/80 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-[10px] opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500/80 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-[9px] opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
                             style={{ zIndex: 10 }}
                           >
                             ×
                           </button>
                         )}
 
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] px-1 py-0.5 truncate text-center">
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[8px] px-1 py-0.5 truncate text-center">
                           {image.name}
                         </div>
                       </div>
@@ -628,11 +653,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       <button
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={page <= 1}
-                        className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="px-2 py-0.5 text-[9px] rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         ← 上一页
                       </button>
-                      <span className="text-[10px] text-gray-500">
+                      <span className="text-[9px] text-gray-500">
                         {page} / {totalPages}
                       </span>
                       <button
@@ -640,7 +665,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                           setPage((p) => Math.min(totalPages, p + 1))
                         }
                         disabled={page >= totalPages}
-                        className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="px-2 py-0.5 text-[9px] rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         下一页 →
                       </button>
@@ -653,10 +678,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         )}
       </div>
 
-      {/* 独立的拖拽手柄 */}
+      {/* 独立的拖拽手柄 - 支持鼠标和触摸 */}
       <div
         className="h-full cursor-col-resize flex items-center justify-center hover:bg-blue-100/50 transition-colors flex-shrink-0 relative z-10"
         onMouseDown={handleResizeStart}
+        onTouchStart={handleTouchResizeStart}
         style={{
           width: "16px",
           minWidth: "16px",
