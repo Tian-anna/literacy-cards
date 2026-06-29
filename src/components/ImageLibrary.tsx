@@ -301,18 +301,18 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
+            className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900"
           >
             <span>{isExpanded ? "▼" : "▶"}</span>
             <span>图片图库</span>
           </button>
-          <span className="text-xs text-gray-400">{images.length} 张</span>
+          <span className="text-[10px] text-gray-400">{images.length} 张</span>
         </div>
 
         {isExpanded && (
           <>
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
-              <div className="flex items-center justify-between text-xs text-gray-500">
+              <div className="flex items-center justify-between text-[10px] text-gray-500">
                 <span>GitHub:</span>
                 {isLoadingGithubCount ? (
                   <span className="animate-pulse">加载中...</span>
@@ -327,10 +327,10 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             {/* 分类筛选 - 改为下拉选择 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-gray-500">分类筛选</span>
+                <span className="text-[10px] text-gray-500">分类筛选</span>
                 <button
                   onClick={() => setIsManagingCategories(!isManagingCategories)}
-                  className="text-xs text-blue-500 hover:text-blue-600"
+                  className="text-[10px] text-blue-500 hover:text-blue-600"
                 >
                   {isManagingCategories ? "完成" : "管理"}
                 </button>
@@ -342,7 +342,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setSelectedCategory(e.target.value);
                   setPage(1);
                 }}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500 bg-white"
+                className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500 bg-white"
               >
                 {["全部", ...categories].map((cat) => (
                   <option key={cat} value={cat}>
@@ -397,7 +397,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               <button
                 onClick={handleSyncFromGitHub}
                 disabled={isSyncing}
-                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
+                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
               >
                 {isSyncing ? (
                   <>
@@ -423,14 +423,14 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setPage(1);
                   setSelectedImages(new Set());
                 }}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500"
+                className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500"
               />
             </div>
 
             <div className="flex-shrink-0 px-3 py-1 border-b border-gray-100 flex gap-2">
               <button
                 onClick={() => handleSort("name")}
-                className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
+                className={`text-[10px] px-2 py-0.5 rounded flex items-center gap-1 ${
                   sortBy === "name"
                     ? "bg-green-500 text-white"
                     : "bg-gray-100 text-gray-600"
@@ -458,7 +458,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setIsBatchMode(!isBatchMode);
                   setSelectedImages(new Set());
                 }}
-                className={`flex-1 px-2 py-1 rounded text-xs ${
+                className={`flex-1 px-2 py-1 rounded text-[10px] ${
                   isBatchMode
                     ? "bg-orange-500 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -469,7 +469,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               <button
                 onClick={handleCleanInvalid}
                 disabled={isCleaning}
-                className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200 disabled:opacity-50"
+                className="px-2 py-1 bg-red-100 text-red-600 rounded text-[10px] hover:bg-red-200 disabled:opacity-50"
               >
                 {isCleaning ? "清理中..." : "清理无效"}
               </button>
@@ -478,33 +478,33 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             {isBatchMode && (
               <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1.5">
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">
+                  <span className="text-[10px] text-gray-500">
                     已选 {selectedImages.size} 张
                   </span>
                   <div className="ml-auto flex gap-1">
                     <button
                       onClick={handleSelectAll}
-                      className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs hover:bg-blue-200"
+                      className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px] hover:bg-blue-200"
                     >
                       全选
                     </button>
                     <button
                       onClick={handleDeselectAll}
-                      className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                      className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] hover:bg-gray-200"
                     >
                       取消
                     </button>
                     <button
                       onClick={handleBatchDelete}
                       disabled={selectedImages.size === 0}
-                      className="px-2 py-0.5 bg-red-500 text-white rounded text-xs disabled:opacity-50 hover:bg-red-600"
+                      className="px-2 py-0.5 bg-red-500 text-white rounded text-[10px] disabled:opacity-50 hover:bg-red-600"
                     >
                       删除
                     </button>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">移到:</span>
+                  <span className="text-[10px] text-gray-500">移到:</span>
                   <select
                     value=""
                     onChange={(e) => {
@@ -535,7 +535,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               }}
             >
               {totalCount === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">
+                <div className="text-center py-8 text-gray-400 text-xs">
                   {searchTerm
                     ? "无结果"
                     : "暂无图片，点击 🔄 同步从 GitHub 加载"}
@@ -616,7 +616,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                           </button>
                         )}
 
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate text-center">
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] px-1 py-0.5 truncate text-center">
                           {image.name}
                         </div>
                       </div>
@@ -628,11 +628,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       <button
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={page <= 1}
-                        className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         ← 上一页
                       </button>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-[10px] text-gray-500">
                         {page} / {totalPages}
                       </span>
                       <button
@@ -640,7 +640,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                           setPage((p) => Math.min(totalPages, p + 1))
                         }
                         disabled={page >= totalPages}
-                        className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         下一页 →
                       </button>
