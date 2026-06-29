@@ -319,7 +319,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     <div className="h-full flex text-[10px]">
       {/* 图库内容区域 */}
       <div
-        className="h-full flex flex-col bg-white border-r border-gray-200"
+        className="h-full flex flex-col bg-white border-r border-gray-200 overflow-hidden"
         style={{ width, minWidth: width, maxWidth: width, flexShrink: 0 }}
       >
         <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
