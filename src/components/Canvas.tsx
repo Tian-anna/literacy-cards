@@ -529,7 +529,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
       <div
         ref={canvasRef}
-        className="flex-1 relative overflow-hidden"
+        className="flex-1 relative overflow-hidden p-0"
         onMouseDown={handleCanvasMouseDown}
         onWheel={handleWheel}
         style={{
