@@ -433,7 +433,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       {/* 绿色菜单栏 - 参考图3样式：绿色底，白色圆角方形按钮，按钮间距 */}
       <div className="flex-shrink-0 flex items-center gap-1 px-2 py-2 bg-green-500 text-white z-10 overflow-x-auto">
         {/* 画布颜色 - 合并到菜单栏 */}
-        <div className="hidden sm:flex items-center gap-1">
+        <div className="flex items-center gap-1">
           <span className="text-[9px] font-medium whitespace-nowrap">
             画布:
           </span>
