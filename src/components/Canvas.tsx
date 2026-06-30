@@ -496,7 +496,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             />
             吸附
           </label>
-          <label className="flex items-center gap-0.5 text-[10px] cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-0.5 text-xs cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={showGrid}
@@ -506,7 +506,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             网格
           </label>
           <div className="flex items-center gap-1">
-            <span className="text-[10px] whitespace-nowrap">{gridSize}px</span>
+            <span className="text-xs whitespace-nowrap">{gridSize}px</span>
             <input
               type="range"
               min="10"
@@ -529,7 +529,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
                 selectedIds.forEach((id) => removeCard(id));
                 clearSelection();
               }}
-              className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-sm hover:bg-red-600"
+              className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs shadow-sm hover:bg-red-600"
               title="删除全部选中"
             >
               ×

@@ -109,10 +109,10 @@ const SceneManager: React.FC = () => {
   };
 
   return (
-    <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-[10px] flex-wrap">
+    <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-xs flex-wrap">
       {/* 添加图片按钮 */}
       <label
-        className={`bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px] cursor-pointer relative overflow-hidden ${
+        className={`bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs cursor-pointer relative overflow-hidden ${
           isUploading ? "opacity-70" : ""
         }`}
       >
@@ -134,7 +134,7 @@ const SceneManager: React.FC = () => {
         onClick={() => {
           if (confirm("确定清空画布吗？")) clearCanvas();
         }}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px]"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
       >
         <span>🗑</span>
         <span>清空</span>
@@ -144,7 +144,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={handleSaveScene}
         disabled={!currentSceneId}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px]"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
       >
         <span>💾</span>
         <span>保存</span>
@@ -154,7 +154,7 @@ const SceneManager: React.FC = () => {
       <div className="relative">
         <button
           onClick={() => setShowScenes(!showScenes)}
-          className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px]"
+          className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
         >
           <span>📂</span>
           <span>场景</span>
@@ -166,7 +166,7 @@ const SceneManager: React.FC = () => {
               <input
                 type="text"
                 placeholder="新场景名称"
-                className="flex-1 border rounded px-2 py-1 text-[10px]"
+                className="flex-1 border rounded px-2 py-1 text-xs"
                 value={newSceneName}
                 onChange={(e) => setNewSceneName(e.target.value)}
               />
@@ -177,7 +177,7 @@ const SceneManager: React.FC = () => {
                     setNewSceneName("");
                   }
                 }}
-                className="bg-green-500 text-white px-2 py-1 rounded text-[10px] hover:bg-green-600"
+                className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600"
               >
                 +
               </button>
@@ -194,13 +194,13 @@ const SceneManager: React.FC = () => {
                   }`}
                   onClick={() => loadScene(scene.id)}
                 >
-                  <span className="text-[10px]">{scene.name}</span>
+                  <span className="text-xs">{scene.name}</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteScene(scene.id);
                     }}
-                    className="text-red-500 hover:bg-red-50 px-1 rounded text-[10px]"
+                    className="text-red-500 hover:bg-red-50 px-1 rounded text-xs"
                   >
                     ×
                   </button>
@@ -215,7 +215,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={handleExport}
         disabled={!currentSceneId}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-[10px]"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-xs"
       >
         导出
       </button>
@@ -223,7 +223,7 @@ const SceneManager: React.FC = () => {
       {/* 导入按钮 */}
       <button
         onClick={() => setShowImport(true)}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-[10px]"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-xs"
       >
         导入
       </button>
@@ -232,7 +232,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={undo}
         disabled={!canUndo}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-[10px]"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-xs"
         title="撤销"
       >
         ↩️
@@ -240,7 +240,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={redo}
         disabled={!canRedo}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-[10px]"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-xs"
         title="重做"
       >
         ↪️
@@ -252,7 +252,7 @@ const SceneManager: React.FC = () => {
           <div className="bg-white rounded-xl p-6 w-96 max-w-[90%] text-gray-800">
             <h3 className="font-bold text-lg mb-4">导入场景</h3>
             <textarea
-              className="w-full h-32 border rounded-lg p-3 text-[10px] mb-4"
+              className="w-full h-32 border rounded-lg p-3 text-xs mb-4"
               placeholder="粘贴场景JSON数据..."
               value={importData}
               onChange={(e) => setImportData(e.target.value)}

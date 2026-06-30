@@ -316,7 +316,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   };
 
   return (
-    <div className="h-full flex text-[10px]">
+    <div className="h-full flex text-xs">
       {/* 图库内容区域 */}
       <div
         className="h-full flex flex-col bg-white border-r border-gray-200 overflow-hidden"
@@ -325,7 +325,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-[10px] font-medium text-gray-700 hover:text-gray-900"
+            className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900"
           >
             <span>{isExpanded ? "▼" : "▶"}</span>
             <span>图片图库</span>
@@ -366,7 +366,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setSelectedCategory(e.target.value);
                   setPage(1);
                 }}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-[10px] focus:outline-none focus:border-green-500 bg-white"
+                className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500 bg-white"
               >
                 {["全部", ...categories].map((cat) => (
                   <option key={cat} value={cat}>
@@ -386,11 +386,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                         e.key === "Enter" && handleAddCategory()
                       }
                       placeholder="新分类名称"
-                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-[10px] focus:outline-none focus:border-green-500"
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500"
                     />
                     <button
                       onClick={handleAddCategory}
-                      className="px-2 py-1 bg-green-500 text-white rounded text-[10px] hover:bg-green-600"
+                      className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
                     >
                       添加
                     </button>
@@ -401,7 +401,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       .map((cat) => (
                         <span
                           key={cat}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded text-[10px]"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded text-xs"
                         >
                           {cat}
                           <button
@@ -421,7 +421,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               <button
                 onClick={handleSyncFromGitHub}
                 disabled={isSyncing}
-                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-[10px] hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
+                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
               >
                 {isSyncing ? (
                   <>
@@ -447,7 +447,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setPage(1);
                   setSelectedImages(new Set());
                 }}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-[10px] focus:outline-none focus:border-green-500"
+                className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500"
                 style={{ fontSize: "10px", maxWidth: "100%" }}
               />
             </div>
@@ -560,7 +560,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               }}
             >
               {totalCount === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-[10px]">
+                <div className="text-center py-8 text-gray-400 text-xs">
                   {searchTerm
                     ? "无结果"
                     : "暂无图片，点击 🔄 同步从 GitHub 加载"}
