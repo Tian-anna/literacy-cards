@@ -46,6 +46,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   const [isBoxSelecting, setIsBoxSelecting] = useState(false);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const isTouchBoxSelectingRef = useRef(false);
   const touchBoxStartRef = useRef({ x: 0, y: 0 });
   const isPanningRef = useRef(false);
@@ -432,27 +433,47 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     <div className="w-full h-full flex flex-col relative">
       {/* 绿色菜单栏 - 参考图3样式：绿色底，白色圆角方形按钮，按钮间距 */}
       <div className="flex-shrink-0 flex items-center gap-1 px-2 py-2 bg-green-500 text-white z-10 overflow-x-auto">
-        {/* 画布颜色 - 合并到菜单栏 */}
-        <div className="flex items-center gap-1">
-          <span className="text-[9px] font-medium whitespace-nowrap">
-            画布:
-          </span>
-          {presetColors.slice(0, 6).map((color) => (
-            <button
-              key={color}
-              onClick={() => setCanvasColor(color)}
-              className={`w-4 h-4 rounded-full border-2 transition-all ${
-                canvasColor === color
-                  ? "border-white ring-1 ring-white scale-110"
-                  : "border-white/50 hover:border-white"
-              }`}
-              style={{ backgroundColor: color }}
-              title={color}
-            />
-          ))}
+        {/* 画布颜色 - 调色盘按钮 */}
+        <div className="relative">
+          <button
+            onClick={() => setShowColorPicker(!showColorPicker)}
+            className="w-6 h-6 rounded-full border-2 border-white/50 shadow-sm flex items-center justify-center"
+            style={{ backgroundColor: canvasColor }}
+            title="画布颜色"
+          >
+            <span className="text-[10px]">🎨</span>
+          </button>
+
+          {showColorPicker && (
+            <div className="absolute top-8 left-0 bg-white rounded-lg shadow-lg p-2 z-50 grid grid-cols-4 gap-1 w-32">
+              {presetColors.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => {
+                    setCanvasColor(color);
+                    setShowColorPicker(false);
+                  }}
+                  className={`w-6 h-6 rounded-full border-2 transition-all ${
+                    canvasColor === color
+                      ? "border-green-500 ring-1 ring-green-500 scale-110"
+                      : "border-gray-200 hover:border-gray-400"
+                  }`}
+                  style={{ backgroundColor: color }}
+                  title={color}
+                />
+              ))}
+              <input
+                type="color"
+                value={canvasColor}
+                onChange={(e) => setCanvasColor(e.target.value)}
+                className="w-6 h-6 rounded-full border-2 border-gray-200 cursor-pointer"
+                title="自定义颜色"
+              />
+            </div>
+          )}
         </div>
 
-        <div className="w-px h-4 bg-white/30 mx-0.5 hidden sm:block" />
+        <div className="w-px h-4 bg-white/30 mx-0.5" />
 
         {/* 缩放控制 - 白色圆角方形按钮 */}
         <div className="flex items-center gap-0.5">
