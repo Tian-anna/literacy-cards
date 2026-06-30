@@ -437,11 +437,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         <div className="relative">
           <button
             onClick={() => setShowColorPicker(!showColorPicker)}
-            className="w-6 h-6 rounded-full border-2 border-white/50 shadow-sm flex items-center justify-center"
+            className="w-6 h-6 rounded-full border-2 border-gray-300 shadow-sm flex items-center justify-center"
             style={{ backgroundColor: canvasColor }}
             title="画布颜色"
           >
-            <span className="text-[10px]">🎨</span>
+            <span className="text-[8px]">🎨</span>
           </button>
 
           {showColorPicker && (
