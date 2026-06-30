@@ -433,44 +433,21 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     <div className="w-full h-full flex flex-col relative">
       {/* 绿色菜单栏 - 参考图3样式：绿色底，白色圆角方形按钮，按钮间距 */}
       <div className="flex-shrink-0 flex items-center gap-1 px-2 py-2 bg-green-500 text-white z-10 overflow-x-auto">
-        {/* 画布颜色 - 调色盘按钮 */}
+        {/* 画布颜色 - 直接显示颜色选择器 */}
         <div className="relative">
-          <button
-            onClick={() => setShowColorPicker(!showColorPicker)}
-            className="w-6 h-6 rounded-full border-2 border-gray-300 shadow-sm flex items-center justify-center"
+          <label
+            className="w-6 h-6 rounded-full border-2 border-gray-300 shadow-sm flex items-center justify-center cursor-pointer overflow-hidden"
             style={{ backgroundColor: canvasColor }}
-            title="画布颜色"
           >
-            <span className="text-[8px]">🎨</span>
-          </button>
-
-          {showColorPicker && (
-            <div className="fixed top-16 left-4 bg-white rounded-lg shadow-lg p-2 z-[9999] grid grid-cols-4 gap-1 w-32 border border-gray-200">
-              {presetColors.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => {
-                    setCanvasColor(color);
-                    setShowColorPicker(false);
-                  }}
-                  className={`w-6 h-6 rounded-full border-2 transition-all ${
-                    canvasColor === color
-                      ? "border-green-500 ring-1 ring-green-500 scale-110"
-                      : "border-gray-200 hover:border-gray-400"
-                  }`}
-                  style={{ backgroundColor: color }}
-                  title={color}
-                />
-              ))}
-              <input
-                type="color"
-                value={canvasColor}
-                onChange={(e) => setCanvasColor(e.target.value)}
-                className="w-6 h-6 rounded-full border-2 border-gray-200 cursor-pointer"
-                title="自定义颜色"
-              />
-            </div>
-          )}
+            <input
+              type="color"
+              value={canvasColor}
+              onChange={(e) => setCanvasColor(e.target.value)}
+              className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+              title="画布颜色"
+            />
+            <span className="text-[8px] pointer-events-none">🎨</span>
+          </label>
         </div>
 
         <div className="w-px h-4 bg-white/30 mx-0.5" />
