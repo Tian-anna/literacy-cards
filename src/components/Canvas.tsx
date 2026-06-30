@@ -445,7 +445,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           </button>
 
           {showColorPicker && (
-            <div className="absolute top-8 left-0 bg-white rounded-lg shadow-lg p-2 z-50 grid grid-cols-4 gap-1 w-32">
+            <div className="fixed top-16 left-4 bg-white rounded-lg shadow-lg p-2 z-[9999] grid grid-cols-4 gap-1 w-32 border border-gray-200">
               {presetColors.map((color) => (
                 <button
                   key={color}
