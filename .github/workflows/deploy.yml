@@ -19,19 +19,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4 # ← 改回 v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4 # ← 改回 v4
         with:
           node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
-        env:
-          VITE_GITHUB_TOKEN: ${{ secrets.UPLOAD_TOKEN }}
-          VITE_GITHUB_REPO: Tian-anna/literacy-cards
 
       - name: Build
         run: npm run build

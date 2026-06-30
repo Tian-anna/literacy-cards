@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef } from "react";
 import { useStore } from "@/store/useStore";
+import { uploadImageToGitHub } from "@/utils/githubApi";
 
 const SceneManager: React.FC = () => {
   const {
@@ -23,42 +24,48 @@ const SceneManager: React.FC = () => {
     canUndo,
     canRedo,
     clearCanvas,
-    addImage, // 从 store 获取添加图片的方法
+    addImage,
   } = useStore();
 
   const [newSceneName, setNewSceneName] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importData, setImportData] = useState("");
   const [showScenes, setShowScenes] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   // 处理文件上传
   const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files || files.length === 0) return;
 
-      Array.from(files).forEach((file) => {
-        if (!file.type.startsWith("image/")) return;
+      setIsUploading(true);
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const dataUrl = event.target?.result as string;
-          if (dataUrl) {
-            // 调用 store 的方法添加图片
-            addImage({
-              src: dataUrl,
-              name: file.name.replace(/\.[^/.]+$/, ""),
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) continue;
 
-              category: "本地",
-              width: 300,
-              height: 300,
-            });
-          }
-        };
-        reader.readAsDataURL(file);
-      });
+        try {
+          // 上传到 GitHub
+          const downloadUrl = await uploadImageToGitHub(file);
 
-      // 清空 input，允许重复选择同一文件
+          // 添加到本地 store
+          addImage({
+            src: downloadUrl,
+            name: file.name.replace(/\.[^/.]+$/, ""),
+            category: "本地",
+            width: 300,
+            height: 300,
+          });
+        } catch (error) {
+          console.error("上传失败:", error);
+          alert(
+            `上传失败: ${error instanceof Error ? error.message : "未知错误"}`,
+          );
+        }
+      }
+
+      setIsUploading(false);
       e.target.value = "";
     },
     [addImage],
@@ -91,15 +98,20 @@ const SceneManager: React.FC = () => {
 
   return (
     <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-[10px] flex-wrap">
-      {/* 添加图片按钮 - 用 label + 透明 input 覆盖 */}
-      <label className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px] cursor-pointer relative overflow-hidden">
-        <span>📁</span>
-        <span>添加</span>
+      {/* 添加图片按钮 */}
+      <label
+        className={`bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px] cursor-pointer relative overflow-hidden ${
+          isUploading ? "opacity-70" : ""
+        }`}
+      >
+        <span>{isUploading ? "⏳" : "📁"}</span>
+        <span>{isUploading ? "上传中..." : "添加"}</span>
         <input
           type="file"
           accept="image/*"
           multiple
           onChange={handleFileUpload}
+          disabled={isUploading}
           className="absolute inset-0 opacity-0 cursor-pointer"
           style={{ width: "100%", height: "100%", fontSize: "100px" }}
         />
