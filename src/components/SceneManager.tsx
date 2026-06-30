@@ -38,16 +38,27 @@ const SceneManager: React.FC = () => {
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
-      if (!files || files.length === 0) return;
+      console.log("📁 选择文件:", files?.length || 0, "个");
+
+      if (!files || files.length === 0) {
+        console.log("❌ 没有文件被选择");
+        return;
+      }
 
       setIsUploading(true);
 
       for (const file of Array.from(files)) {
-        if (!file.type.startsWith("image/")) continue;
+        if (!file.type.startsWith("image/")) {
+          console.log("⏭️ 跳过非图片文件:", file.name);
+          continue;
+        }
+
+        console.log("🚀 开始上传:", file.name);
 
         try {
           // 上传到 GitHub
           const downloadUrl = await uploadImageToGitHub(file);
+          console.log("✅ 上传成功:", downloadUrl);
 
           // 添加到本地 store
           addImage({
@@ -57,8 +68,9 @@ const SceneManager: React.FC = () => {
             width: 300,
             height: 300,
           });
+          console.log("✅ 已添加到本地图库");
         } catch (error) {
-          console.error("上传失败:", error);
+          console.error("❌ 上传失败:", error);
           alert(
             `上传失败: ${error instanceof Error ? error.message : "未知错误"}`,
           );
