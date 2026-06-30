@@ -146,14 +146,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   );
 
   // 滚轮缩放 - 阻止浏览器默认缩放
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setCanvasScale((prev) => Math.max(0.3, Math.min(3, prev + delta)));
-    }
-  }, []);
 
   // 阻止 Ctrl+滚轮的浏览器默认行为
   useEffect(() => {
@@ -228,6 +220,22 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        setCanvasScale((prev) => Math.max(0.3, Math.min(3, prev + delta)));
+      }
+    };
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
 
     let touchStartTime = 0;
     let hasMoved = false;
@@ -529,7 +537,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         ref={canvasRef}
         className="flex-1 relative overflow-hidden p-0"
         onMouseDown={handleCanvasMouseDown}
-        onWheel={handleWheel}
         style={{
           backgroundColor: canvasColor,
           touchAction: "pan-x pan-y pinch-zoom",
