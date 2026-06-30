@@ -221,22 +221,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        const delta = e.deltaY > 0 ? -0.1 : 0.1;
-        setCanvasScale((prev) => Math.max(0.3, Math.min(3, prev + delta)));
-      }
-    };
-
-    canvas.addEventListener("wheel", handleWheel, { passive: false });
-
-    return () => {
-      canvas.removeEventListener("wheel", handleWheel);
-    };
-  }, []);
-
     let touchStartTime = 0;
     let hasMoved = false;
 
