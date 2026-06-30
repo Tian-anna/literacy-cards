@@ -23,12 +23,46 @@ const SceneManager: React.FC = () => {
     canUndo,
     canRedo,
     clearCanvas,
+    addImage, // 从 store 获取添加图片的方法
   } = useStore();
 
   const [newSceneName, setNewSceneName] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importData, setImportData] = useState("");
   const [showScenes, setShowScenes] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // 处理文件上传
+  const handleFileUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      Array.from(files).forEach((file) => {
+        if (!file.type.startsWith("image/")) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          if (dataUrl) {
+            // 调用 store 的方法添加图片
+            addImage({
+              src: dataUrl,
+              name: file.name.replace(/\.[^/.]+$/, ""),
+
+              category: "本地",
+              width: 300,
+              height: 300,
+            });
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+
+      // 清空 input，允许重复选择同一文件
+      e.target.value = "";
+    },
+    [addImage],
+  );
 
   const handleSaveScene = () => {
     if (!currentSceneId) return;
@@ -57,14 +91,19 @@ const SceneManager: React.FC = () => {
 
   return (
     <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-[10px] flex-wrap">
-      {/* 添加图片按钮 - 白色圆角方形 */}
-      <button
-        onClick={() => document.getElementById("file-upload")?.click()}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px]"
-      >
+      {/* 添加图片按钮 - 用 label + 透明 input 覆盖 */}
+      <label className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-[10px] cursor-pointer relative overflow-hidden">
         <span>📁</span>
         <span>添加</span>
-      </button>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileUpload}
+          className="absolute inset-0 opacity-0 cursor-pointer"
+          style={{ width: "100%", height: "100%", fontSize: "100px" }}
+        />
+      </label>
 
       {/* 清空按钮 */}
       <button
