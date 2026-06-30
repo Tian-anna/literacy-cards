@@ -519,9 +519,22 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         </div>
 
         {selectedIds.size > 0 && (
-          <span className="text-[9px] font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0">
-            已选 {selectedIds.size} 张
-          </span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <span className="text-[9px] font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap">
+              已选 {selectedIds.size} 张
+            </span>
+            <button
+              onClick={() => {
+                const { removeCard } = useStore.getState();
+                selectedIds.forEach((id) => removeCard(id));
+                clearSelection();
+              }}
+              className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-sm hover:bg-red-600"
+              title="删除全部选中"
+            >
+              ×
+            </button>
+          </div>
         )}
       </div>
 
