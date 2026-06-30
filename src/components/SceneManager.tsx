@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { useStore } from "@/store/useStore";
 
 const SceneManager: React.FC = () => {
