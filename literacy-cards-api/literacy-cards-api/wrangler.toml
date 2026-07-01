@@ -1,8 +1,0 @@
-name = "literacy-cards-api"
-main = "src/index.ts"
-compatibility_date = "2026-07-01"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "literacy-cards-db"
-database_id = "d087529d-3f80-4bc8-bad6-24fbc161e467"
