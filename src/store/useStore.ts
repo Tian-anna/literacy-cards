@@ -437,17 +437,17 @@ export const useStore = create<StoreState>()(
             if (isValid) {
               validImages.push(image);
             } else {
-              invalidLocalCount++;
+              invalidCount++;
               console.log("本地 URL 无效，移除:", image.name);
             }
           } catch {
-            invalidLocalCount++;
+            invalidCount++;
             console.log("本地 URL 无效，移除:", image.name);
           }
         }
 
-        if (invalidLocalCount > 0) {
-          console.log("本地清理无效图片:", invalidLocalCount, "张");
+        if (invalidCount > 0) {
+          console.log("本地清理无效图片:", invalidCount, "张");
         }
 
         set({ images: validImages });
