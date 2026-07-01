@@ -112,7 +112,7 @@ const SceneManager: React.FC = () => {
     <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-xs flex-wrap">
       {/* 添加图片按钮 - 上传到 Cloudinary */}
       <label
-        className={`bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs cursor-pointer relative overflow-hidden ${
+        className={`bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 inline-flex items-center gap-1 transition-colors shadow-sm font-medium text-xs cursor-pointer relative overflow-hidden border border-green-200 ${
           isUploading ? "opacity-70" : ""
         }`}
       >
@@ -127,7 +127,7 @@ const SceneManager: React.FC = () => {
           onChange={handleFileUpload}
           disabled={isUploading}
           className="absolute inset-0 opacity-0 cursor-pointer"
-          style={{ width: "100%", height: "100%", fontSize: "16px" }}
+          style={{ width: "100%", height: "100%" }}
         />
       </label>
 
