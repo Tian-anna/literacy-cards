@@ -11,6 +11,8 @@ import {
   getCloudinaryImages,
   getCloudinaryImageCount,
   clearAllCloudImages,
+  cleanInvalidCloudImages,
+  CleanResult,
 } from "@/utils/cloudinaryApi";
 
 interface ImageLibraryProps {
@@ -51,6 +53,9 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isCleaning, setIsCleaning] = useState(false);
+  const [lastCleanResult, setLastCleanResult] = useState<CleanResult | null>(
+    null,
+  );
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // 使用 useRef 而不是 useState 来跟踪拖拽状态，避免重渲染
@@ -198,7 +203,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setPage(1);
   };
 
-  // 从云端同步
+  // 从云端同步（自动过滤 sample 图片）
   const handleSyncFromCloud = async () => {
     if (images.length > 0) {
       if (!confirm("本地已有图片，同步可能导致重复。是否继续？")) return;
@@ -207,8 +212,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setIsSyncing(true);
     try {
       const cloudImages = await getCloudinaryImages();
+      // getCloudinaryImages 已经过滤了 sample 图片
 
       let addedCount = 0;
+      let skippedCount = 0;
+
       for (const img of cloudImages) {
         const exists = images.some(
           (localImg) => localImg.src === img.url || localImg.name === img.name,
@@ -222,11 +230,18 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             height: 300,
           });
           addedCount++;
+        } else {
+          skippedCount++;
         }
       }
 
       setCloudCount(cloudImages.length);
-      alert(`同步完成，新增 ${addedCount} 张图片`);
+
+      const msg =
+        skippedCount > 0
+          ? `同步完成，新增 ${addedCount} 张，跳过 ${skippedCount} 张重复`
+          : `同步完成，新增 ${addedCount} 张图片`;
+      alert(msg);
     } catch (error) {
       console.error("从云端同步失败:", error);
       alert("同步失败，请查看控制台");
@@ -235,14 +250,19 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
-  // 清空所有云端图片
+  // 清空所有云端图片（只删除自己的，不碰 sample）
   const handleClearAllCloud = async () => {
-    if (!confirm("确定清空所有云端图片吗？此操作不可恢复！")) return;
+    if (
+      !confirm(
+        "确定清空所有云端图片吗？此操作不可恢复！\n（Cloudinary 示例图片不会被删除）",
+      )
+    )
+      return;
 
     try {
-      await clearAllCloudImages();
+      const deletedCount = await clearAllCloudImages();
       await fetchCloudCount();
-      alert("清空成功！");
+      alert(`清空成功！已删除 ${deletedCount} 张图片`);
     } catch (error) {
       alert("清空失败：" + (error as Error).message);
     }
@@ -295,15 +315,34 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
+  // 清理无效图片（使用 cloudinaryApi 中的新方法）
   const handleCleanInvalid = async () => {
-    if (!confirm("确定清理所有无效图片吗？")) return;
+    if (
+      !confirm(
+        "确定清理所有无效图片吗？\n这会检查每张图片是否可访问，并删除无效记录。",
+      )
+    )
+      return;
+
     setIsCleaning(true);
+    setLastCleanResult(null);
+
     try {
-      await useStore.getState().cleanInvalidImages();
-      alert("清理完成！");
+      const result = await cleanInvalidCloudImages();
+      setLastCleanResult(result);
+
+      // 刷新数量
+      await fetchCloudCount();
+
+      const msg =
+        result.errors.length > 0
+          ? `清理完成！\n总计: ${result.total} 张\n检查: ${result.checked} 张\n无效: ${result.invalid} 张\n已删除: ${result.deleted} 张\n错误: ${result.errors.length} 个`
+          : `清理完成！\n总计: ${result.total} 张\n检查: ${result.checked} 张\n无效: ${result.invalid} 张\n已删除: ${result.deleted} 张`;
+
+      alert(msg);
     } catch (e) {
       console.error("清理失败:", e);
-      alert("清理失败");
+      alert("清理失败: " + (e as Error).message);
     } finally {
       setIsCleaning(false);
     }
@@ -345,7 +384,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     <button
                       onClick={handleClearAllCloud}
                       className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-500 rounded hover:bg-red-200"
-                      title="清空云端"
+                      title="清空云端（保留示例图）"
                     >
                       清空
                     </button>
@@ -502,10 +541,18 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 onClick={handleCleanInvalid}
                 disabled={isCleaning}
                 className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200 disabled:opacity-50"
+                title="清理无效图片和示例图记录"
               >
                 {isCleaning ? "清理中..." : "清理无效"}
               </button>
             </div>
+
+            {/* 清理结果提示 */}
+            {lastCleanResult && lastCleanResult.deleted > 0 && (
+              <div className="flex-shrink-0 px-3 py-1 bg-yellow-50 border-b border-yellow-100 text-[10px] text-yellow-700">
+                上次清理: 删除 {lastCleanResult.deleted} 张无效图片
+              </div>
+            )}
 
             {isBatchMode && (
               <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1.5">

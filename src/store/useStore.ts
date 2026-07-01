@@ -418,10 +418,16 @@ export const useStore = create<StoreState>()(
         function checkImageUrl(url: string): Promise<boolean> {
           return new Promise((resolve) => {
             const img = new Image();
-            img.onload = () => resolve(true);
-            img.onerror = () => resolve(false);
+            const timeout = setTimeout(() => resolve(false), 5000);
+            img.onload = () => {
+              clearTimeout(timeout);
+              resolve(true);
+            };
+            img.onerror = () => {
+              clearTimeout(timeout);
+              resolve(false);
+            };
             img.src = url;
-            setTimeout(() => resolve(false), 5000);
           });
         }
 
@@ -431,22 +437,23 @@ export const useStore = create<StoreState>()(
             if (isValid) {
               validImages.push(image);
             } else {
-              invalidCount++;
-              console.log("URL 无效，从本地移除:", image.name);
+              invalidLocalCount++;
+              console.log("本地 URL 无效，移除:", image.name);
             }
           } catch {
-            invalidCount++;
-            console.log("URL 无效，从本地移除:", image.name);
+            invalidLocalCount++;
+            console.log("本地 URL 无效，移除:", image.name);
           }
         }
 
-        if (invalidCount > 0) {
-          console.log(
-            "共清理无效图片:",
-            invalidCount,
-            "张（仅本地，不删 GitHub）",
-          );
+        if (invalidLocalCount > 0) {
+          console.log("本地清理无效图片:", invalidLocalCount, "张");
         }
+
+        set({ images: validImages });
+
+        // 2. 同时清理云端无效图片（由 cloudinaryApi 处理）
+        // 返回结果在 ImageLibrary 中显示
 
         set({ images: validImages });
       },

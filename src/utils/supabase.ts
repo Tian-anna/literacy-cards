@@ -4,3 +4,6 @@ const SUPABASE_URL = "https://gkctlseoxnutwfcbckxx.supabase.co";
 const SUPABASE_KEY = "sb_publishable_spm2uMyIpRkNg_2grsWnpg_jqDMfvqU";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// 导出类型供其他文件使用
+export type { SupabaseClient } from "@supabase/supabase-js";
