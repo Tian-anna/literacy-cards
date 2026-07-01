@@ -542,7 +542,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               }}
             >
               {totalCount === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-xs">
+                <div className="text-center py-8 text-gray-400 text-[10px]">
                   {searchTerm
                     ? "无结果"
                     : "暂无图片，点击 📁 添加或 🔄 从云端同步"}
