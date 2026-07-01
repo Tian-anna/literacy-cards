@@ -1,6 +1,7 @@
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const API_KEY = import.meta.env.VITE_CLOUDINARY_API_KEY;
-const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "literacy-cards";
+const UPLOAD_PRESET =
+  import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "literacy-cards";
 
 // 调试
 console.log("☁️ Cloudinary 配置:");
@@ -12,7 +13,9 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   console.log("🚀 上传到 Cloudinary:", file.name);
 
   if (!CLOUD_NAME) {
-    throw new Error("Cloudinary Cloud Name 未设置，请在环境变量中配置 VITE_CLOUDINARY_CLOUD_NAME");
+    throw new Error(
+      "Cloudinary Cloud Name 未设置，请在环境变量中配置 VITE_CLOUDINARY_CLOUD_NAME",
+    );
   }
 
   const formData = new FormData();
@@ -40,7 +43,9 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
 }
 
 // 获取 Cloudinary 图片列表
-export async function getCloudinaryImages(): Promise<Array<{ name: string; url: string }>> {
+export async function getCloudinaryImages(): Promise<
+  Array<{ name: string; url: string }>
+> {
   if (!CLOUD_NAME) {
     throw new Error("Cloudinary Cloud Name 未设置");
   }
@@ -81,3 +86,4 @@ export async function getCloudinaryImages(): Promise<Array<{ name: string; url: 
 export async function getCloudinaryImageCount(): Promise<number> {
   const images = await getCloudinaryImages();
   return images.length;
+}
