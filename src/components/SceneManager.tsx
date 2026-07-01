@@ -11,12 +11,6 @@ const SceneManager: React.FC = () => {
     deleteScene,
     updateScene,
     placedCards,
-    gridSize,
-    setGridSize,
-    snapToGrid,
-    setSnapToGrid,
-    showGrid,
-    setShowGrid,
     exportScene,
     importScene,
     undo,
@@ -32,7 +26,6 @@ const SceneManager: React.FC = () => {
   const [importData, setImportData] = useState("");
   const [showScenes, setShowScenes] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 处理文件上传 - 上传到 Cloudinary
   const handleFileUpload = useCallback(
@@ -56,11 +49,9 @@ const SceneManager: React.FC = () => {
         console.log("🚀 开始上传到 Cloudinary:", file.name);
 
         try {
-          // 上传到 Cloudinary
           const imageUrl = await uploadImageToCloudinary(file);
           console.log("✅ 上传成功:", imageUrl);
 
-          // 添加到本地 store
           addImage({
             src: imageUrl,
             name: file.name.replace(/\.[^/.]+$/, ""),
@@ -109,12 +100,16 @@ const SceneManager: React.FC = () => {
   };
 
   return (
-    <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-xs flex-wrap">
-      {/* 添加图片按钮 - 上传到 Cloudinary */}
+    <div
+      className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md flex-wrap"
+      style={{ fontSize: "10px" }}
+    >
+      {/* 添加图片按钮 */}
       <label
-        className={`bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 inline-flex items-center gap-1 transition-colors shadow-sm font-medium text-xs cursor-pointer relative overflow-hidden border border-green-200 ${
+        className={`bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 inline-flex items-center gap-1 transition-colors shadow-sm font-medium cursor-pointer relative overflow-hidden border border-green-200 ${
           isUploading ? "opacity-70" : ""
         }`}
+        style={{ fontSize: "10px" }}
       >
         <span className="pointer-events-none">{isUploading ? "⏳" : "📁"}</span>
         <span className="pointer-events-none">
@@ -136,7 +131,8 @@ const SceneManager: React.FC = () => {
         onClick={() => {
           if (confirm("确定清空画布吗？")) clearCanvas();
         }}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium"
+        style={{ fontSize: "10px" }}
       >
         <span>🗑</span>
         <span>清空</span>
@@ -146,7 +142,8 @@ const SceneManager: React.FC = () => {
       <button
         onClick={handleSaveScene}
         disabled={!currentSceneId}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium"
+        style={{ fontSize: "10px" }}
       >
         <span>💾</span>
         <span>保存</span>
@@ -156,19 +153,24 @@ const SceneManager: React.FC = () => {
       <div className="relative">
         <button
           onClick={() => setShowScenes(!showScenes)}
-          className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs"
+          className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium"
+          style={{ fontSize: "10px" }}
         >
           <span>📂</span>
           <span>场景</span>
         </button>
 
         {showScenes && (
-          <div className="absolute top-full left-0 mt-1 bg-white text-gray-800 rounded-lg shadow-xl p-3 w-56 z-50">
+          <div
+            className="absolute top-full left-0 mt-1 bg-white text-gray-800 rounded-lg shadow-xl p-3 w-56 z-50"
+            style={{ fontSize: "10px" }}
+          >
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
                 placeholder="新场景名称"
-                className="flex-1 border rounded px-2 py-1 text-xs"
+                className="flex-1 border rounded px-2 py-1"
+                style={{ fontSize: "10px" }}
                 value={newSceneName}
                 onChange={(e) => setNewSceneName(e.target.value)}
               />
@@ -179,7 +181,8 @@ const SceneManager: React.FC = () => {
                     setNewSceneName("");
                   }
                 }}
-                className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600"
+                className="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                style={{ fontSize: "10px" }}
               >
                 +
               </button>
@@ -196,13 +199,14 @@ const SceneManager: React.FC = () => {
                   }`}
                   onClick={() => loadScene(scene.id)}
                 >
-                  <span className="text-xs">{scene.name}</span>
+                  <span>{scene.name}</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteScene(scene.id);
                     }}
-                    className="text-red-500 hover:bg-red-50 px-1 rounded text-xs"
+                    className="text-red-500 hover:bg-red-50 px-1 rounded"
+                    style={{ fontSize: "10px" }}
                   >
                     ×
                   </button>
@@ -217,7 +221,8 @@ const SceneManager: React.FC = () => {
       <button
         onClick={handleExport}
         disabled={!currentSceneId}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium"
+        style={{ fontSize: "10px" }}
       >
         导出
       </button>
@@ -225,7 +230,8 @@ const SceneManager: React.FC = () => {
       {/* 导入按钮 */}
       <button
         onClick={() => setShowImport(true)}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium"
+        style={{ fontSize: "10px" }}
       >
         导入
       </button>
@@ -234,7 +240,8 @@ const SceneManager: React.FC = () => {
       <button
         onClick={undo}
         disabled={!canUndo}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm"
+        style={{ fontSize: "10px" }}
         title="撤销"
       >
         ↩️
@@ -242,7 +249,8 @@ const SceneManager: React.FC = () => {
       <button
         onClick={redo}
         disabled={!canRedo}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm text-xs"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm"
+        style={{ fontSize: "10px" }}
         title="重做"
       >
         ↪️
@@ -251,10 +259,16 @@ const SceneManager: React.FC = () => {
       {/* 导入弹窗 */}
       {showImport && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-96 max-w-[90%] text-gray-800">
-            <h3 className="font-bold text-lg mb-4">导入场景</h3>
+          <div
+            className="bg-white rounded-xl p-6 w-96 max-w-[90%] text-gray-800"
+            style={{ fontSize: "10px" }}
+          >
+            <h3 className="font-bold mb-4" style={{ fontSize: "12px" }}>
+              导入场景
+            </h3>
             <textarea
-              className="w-full h-32 border rounded-lg p-3 text-xs mb-4"
+              className="w-full h-32 border rounded-lg p-3 mb-4"
+              style={{ fontSize: "10px" }}
               placeholder="粘贴场景JSON数据..."
               value={importData}
               onChange={(e) => setImportData(e.target.value)}
@@ -263,12 +277,14 @@ const SceneManager: React.FC = () => {
               <button
                 onClick={() => setShowImport(false)}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                style={{ fontSize: "10px" }}
               >
                 取消
               </button>
               <button
                 onClick={handleImport}
                 className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                style={{ fontSize: "10px" }}
               >
                 导入
               </button>

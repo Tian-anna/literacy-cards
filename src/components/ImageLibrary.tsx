@@ -58,12 +58,10 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   );
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // 使用 useRef 而不是 useState 来跟踪拖拽状态，避免重渲染
   const isResizingRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(width);
 
-  // 获取云端图片数量
   const fetchCloudCount = useCallback(async () => {
     setIsLoadingCloudCount(true);
     try {
@@ -81,7 +79,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     fetchCloudCount();
   }, [fetchCloudCount]);
 
-  // 拖拽调整宽度 - 支持鼠标和触摸事件
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current) return;
@@ -146,7 +143,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     document.body.style.userSelect = "none";
   };
 
-  // 计算每个分类的图片数量
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { 全部: images.length };
     categories.forEach((cat) => {
@@ -203,7 +199,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setPage(1);
   };
 
-  // 从云端同步（自动过滤 sample 图片）
   const handleSyncFromCloud = async () => {
     if (images.length > 0) {
       if (!confirm("本地已有图片，同步可能导致重复。是否继续？")) return;
@@ -212,8 +207,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setIsSyncing(true);
     try {
       const cloudImages = await getCloudinaryImages();
-      // getCloudinaryImages 已经过滤了 sample 图片
-
       let addedCount = 0;
       let skippedCount = 0;
 
@@ -236,7 +229,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       }
 
       setCloudCount(cloudImages.length);
-
       const msg =
         skippedCount > 0
           ? `同步完成，新增 ${addedCount} 张，跳过 ${skippedCount} 张重复`
@@ -250,7 +242,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
-  // 清空所有云端图片（只删除自己的，不碰 sample）
   const handleClearAllCloud = async () => {
     if (
       !confirm(
@@ -315,7 +306,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
-  // 清理无效图片（使用 cloudinaryApi 中的新方法）
   const handleCleanInvalid = async () => {
     if (
       !confirm(
@@ -328,26 +318,19 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setLastCleanResult(null);
 
     try {
-      // 1. 清理本地无效图片
       await useStore.getState().cleanInvalidImages();
-      // 2. 清理云端无效图片
       const result = await cleanInvalidCloudImages();
       setLastCleanResult(result);
-
-      // 3. 刷新云端数量显示
       await fetchCloudCount();
 
-      // 显示结果
       const messages = ["清理完成！"];
       messages.push(`云端记录: ${result.total} 条`);
       messages.push(`检查图片: ${result.checked} 张`);
       messages.push(`发现无效: ${result.invalid} 张`);
       messages.push(`已删除: ${result.deleted} 条`);
-
       if (result.errors.length > 0) {
         messages.push(`错误: ${result.errors.length} 个`);
       }
-
       alert(messages.join("\n"));
     } catch (e) {
       console.error("清理失败:", e);
@@ -358,8 +341,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   };
 
   return (
-    <div className="h-full flex text-xs">
-      {/* 图库内容区域 */}
+    <div className="h-full flex" style={{ fontSize: "10px" }}>
       <div
         className="h-full flex flex-col bg-white border-r border-gray-200 overflow-hidden"
         style={{ width, minWidth: width, maxWidth: width, flexShrink: 0 }}
@@ -367,19 +349,20 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900"
+            className="flex items-center gap-1 font-medium text-gray-700 hover:text-gray-900"
+            style={{ fontSize: "10px" }}
           >
             <span>{isExpanded ? "▼" : "▶"}</span>
             <span>图片图库</span>
           </button>
-          <span className="text-xs text-gray-400">{images.length} 张</span>
+          <span className="text-gray-400">{images.length} 张</span>
         </div>
 
         {isExpanded && (
           <>
             {/* 云端信息 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
-              <div className="flex items-center justify-between text-xs text-gray-500">
+              <div className="flex items-center justify-between text-gray-500">
                 <span>云端:</span>
                 <div className="flex items-center gap-2">
                   {isLoadingCloudCount ? (
@@ -392,7 +375,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   {cloudCount !== null && cloudCount > 0 && (
                     <button
                       onClick={handleClearAllCloud}
-                      className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-500 rounded hover:bg-red-200"
+                      className="px-1.5 py-0.5 bg-red-100 text-red-500 rounded hover:bg-red-200"
                       title="清空云端（保留示例图）"
                     >
                       清空
@@ -407,7 +390,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               <button
                 onClick={handleSyncFromCloud}
                 disabled={isSyncing}
-                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-[10px] hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
+                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
               >
                 {isSyncing ? (
                   <>
@@ -426,10 +409,10 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             {/* 分类筛选 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-gray-500">分类筛选</span>
+                <span className="text-gray-500">分类筛选</span>
                 <button
                   onClick={() => setIsManagingCategories(!isManagingCategories)}
-                  className="text-xs text-blue-500 hover:text-blue-600"
+                  className="text-blue-500 hover:text-blue-600"
                 >
                   {isManagingCategories ? "完成" : "管理"}
                 </button>
@@ -441,7 +424,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setSelectedCategory(e.target.value);
                   setPage(1);
                 }}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500 bg-white"
+                className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500 bg-white"
               >
                 {["全部", ...categories].map((cat) => (
                   <option key={cat} value={cat}>
@@ -461,11 +444,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                         e.key === "Enter" && handleAddCategory()
                       }
                       placeholder="新分类名称"
-                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500"
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500"
                     />
                     <button
                       onClick={handleAddCategory}
-                      className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                      className="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600"
                     >
                       添加
                     </button>
@@ -476,7 +459,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       .map((cat) => (
                         <span
                           key={cat}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded text-xs"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded"
                         >
                           {cat}
                           <button
@@ -492,6 +475,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               )}
             </div>
 
+            {/* 搜索 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <input
                 type="text"
@@ -502,15 +486,16 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setPage(1);
                   setSelectedImages(new Set());
                 }}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-green-500"
-                style={{ fontSize: "10px", maxWidth: "100%" }}
+                className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500"
+                style={{ maxWidth: "100%" }}
               />
             </div>
 
+            {/* 排序 */}
             <div className="flex-shrink-0 px-3 py-1 border-b border-gray-100 flex gap-2">
               <button
                 onClick={() => handleSort("name")}
-                className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
+                className={`px-2 py-0.5 rounded flex items-center gap-1 ${
                   sortBy === "name"
                     ? "bg-green-500 text-white"
                     : "bg-gray-100 text-gray-600"
@@ -521,7 +506,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </button>
               <button
                 onClick={() => handleSort("date")}
-                className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
+                className={`px-2 py-0.5 rounded flex items-center gap-1 ${
                   sortBy === "date"
                     ? "bg-green-500 text-white"
                     : "bg-gray-100 text-gray-600"
@@ -532,13 +517,14 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </button>
             </div>
 
+            {/* 批量操作 + 清理无效 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 flex gap-2">
               <button
                 onClick={() => {
                   setIsBatchMode(!isBatchMode);
                   setSelectedImages(new Set());
                 }}
-                className={`flex-1 px-2 py-1 rounded text-xs ${
+                className={`flex-1 px-2 py-1 rounded ${
                   isBatchMode
                     ? "bg-orange-500 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -549,15 +535,16 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               <button
                 onClick={handleCleanInvalid}
                 disabled={isCleaning}
-                className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200 disabled:opacity-50"
+                className="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-50"
                 title="检查所有云端图片URL是否可访问，删除无效记录"
               >
                 {isCleaning ? "清理中..." : "清理无效"}
               </button>
             </div>
 
-            {lastCleanResult && (
-              <div className="flex-shrink-0 px-3 py-1 bg-yellow-50 border-b border-yellow-100 text-[10px] text-yellow-700">
+            {/* 清理结果提示 */}
+            {lastCleanResult && lastCleanResult.deleted > 0 && (
+              <div className="flex-shrink-0 px-3 py-1 bg-yellow-50 border-b border-yellow-100 text-yellow-700">
                 上次清理: 检查 {lastCleanResult.checked} 张, 无效{" "}
                 {lastCleanResult.invalid} 张, 删除 {lastCleanResult.deleted} 条
                 {lastCleanResult.errors.length > 0 &&
@@ -565,36 +552,37 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             )}
 
+            {/* 批量模式工具栏 */}
             {isBatchMode && (
               <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 space-y-1.5">
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">
+                  <span className="text-gray-500">
                     已选 {selectedImages.size} 张
                   </span>
                   <div className="ml-auto flex gap-1">
                     <button
                       onClick={handleSelectAll}
-                      className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs hover:bg-blue-200"
+                      className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
                     >
                       全选
                     </button>
                     <button
                       onClick={handleDeselectAll}
-                      className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                      className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
                     >
                       取消
                     </button>
                     <button
                       onClick={handleBatchDelete}
                       disabled={selectedImages.size === 0}
-                      className="px-2 py-0.5 bg-red-500 text-white rounded text-xs disabled:opacity-50 hover:bg-red-600"
+                      className="px-2 py-0.5 bg-red-500 text-white rounded disabled:opacity-50 hover:bg-red-600"
                     >
                       删除
                     </button>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">移到:</span>
+                  <span className="text-gray-500">移到:</span>
                   <select
                     value=""
                     onChange={(e) => {
@@ -603,7 +591,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       }
                     }}
                     disabled={selectedImages.size === 0}
-                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs disabled:opacity-50 focus:outline-none focus:border-green-500"
+                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded disabled:opacity-50 focus:outline-none focus:border-green-500"
                   >
                     <option value="">选择分类...</option>
                     {categories.map((cat) => (
@@ -616,6 +604,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             )}
 
+            {/* 图片列表 */}
             <div
               ref={scrollContainerRef}
               className="flex-1 overflow-y-auto p-2"
@@ -625,7 +614,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               }}
             >
               {totalCount === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-[10px]">
+                <div className="text-center py-8 text-gray-400">
                   {searchTerm
                     ? "无结果"
                     : "暂无图片，点击 📁 添加或 🔄 从云端同步"}
@@ -669,7 +658,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                                 const parent = target.parentElement;
                                 if (parent) {
                                   parent.innerHTML = `
-                                    <div class="flex items-center justify-center w-full h-full text-xs text-gray-400 bg-gray-100">
+                                    <div class="flex items-center justify-center w-full h-full text-gray-400 bg-gray-100">
                                       ${image.name || "?"}
                                     </div>
                                   `;
@@ -677,20 +666,18 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                               }}
                             />
                           ) : (
-                            <div className="flex items-center justify-center w-full h-full text-xs text-gray-400 bg-gray-100">
+                            <div className="flex items-center justify-center w-full h-full text-gray-400 bg-gray-100">
                               {image.name || "?"}
                             </div>
                           )}
                         </div>
 
-                        {/* 批量选择标记 */}
                         {isBatchMode && selectedImages.has(image.id) && (
-                          <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white text-xs shadow-sm">
+                          <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white shadow-sm">
                             ✓
                           </div>
                         )}
 
-                        {/* 删除按钮 */}
                         {!isBatchMode && (
                           <button
                             onClick={(e) => {
@@ -699,14 +686,14 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                                 removeImage(image.id);
                               }
                             }}
-                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500/80 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-xs opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500/80 hover:bg-red-600 rounded-full flex items-center justify-center text-white opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity"
                             style={{ zIndex: 10 }}
                           >
                             ×
                           </button>
                         )}
 
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1 py-0.5 truncate text-center">
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white px-1 py-0.5 truncate text-center">
                           {image.name}
                         </div>
                       </div>
@@ -718,11 +705,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       <button
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={page <= 1}
-                        className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         ← 上一页
                       </button>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-gray-500">
                         {page} / {totalPages}
                       </span>
                       <button
@@ -730,7 +717,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                           setPage((p) => Math.min(totalPages, p + 1))
                         }
                         disabled={page >= totalPages}
-                        className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         下一页 →
                       </button>
@@ -743,7 +730,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         )}
       </div>
 
-      {/* 独立的拖拽手柄 - 支持鼠标和触摸 */}
+      {/* 拖拽手柄 */}
       <div
         className="h-full cursor-col-resize flex items-center justify-center hover:bg-blue-100/50 transition-colors flex-shrink-0 relative z-10"
         onMouseDown={handleResizeStart}
