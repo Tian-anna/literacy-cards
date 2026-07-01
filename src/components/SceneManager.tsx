@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from "react";
 import { useStore } from "@/store/useStore";
-import { uploadImageToGitHub } from "@/utils/githubApi";
+import { uploadImageToCloudinary } from "@/utils/cloudinaryApi";
 
 const SceneManager: React.FC = () => {
   const {
@@ -34,7 +34,7 @@ const SceneManager: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 处理文件上传
+  // 处理文件上传 - 上传到 Cloudinary
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
@@ -53,16 +53,16 @@ const SceneManager: React.FC = () => {
           continue;
         }
 
-        console.log("🚀 开始上传:", file.name);
+        console.log("🚀 开始上传到 Cloudinary:", file.name);
 
         try {
-          // 上传到 GitHub
-          const downloadUrl = await uploadImageToGitHub(file);
-          console.log("✅ 上传成功:", downloadUrl);
+          // 上传到 Cloudinary
+          const imageUrl = await uploadImageToCloudinary(file);
+          console.log("✅ 上传成功:", imageUrl);
 
           // 添加到本地 store
           addImage({
-            src: downloadUrl,
+            src: imageUrl,
             name: file.name.replace(/\.[^/.]+$/, ""),
             category: "本地",
             width: 300,
@@ -110,14 +110,16 @@ const SceneManager: React.FC = () => {
 
   return (
     <div className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md text-xs flex-wrap">
-      {/* 添加图片按钮 */}
+      {/* 添加图片按钮 - 上传到 Cloudinary */}
       <label
         className={`bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium text-xs cursor-pointer relative overflow-hidden ${
           isUploading ? "opacity-70" : ""
         }`}
       >
-        <span>{isUploading ? "⏳" : "📁"}</span>
-        <span>{isUploading ? "上传中..." : "添加"}</span>
+        <span className="pointer-events-none">{isUploading ? "⏳" : "📁"}</span>
+        <span className="pointer-events-none">
+          {isUploading ? "上传中..." : "添加"}
+        </span>
         <input
           type="file"
           accept="image/*"
@@ -125,7 +127,7 @@ const SceneManager: React.FC = () => {
           onChange={handleFileUpload}
           disabled={isUploading}
           className="absolute inset-0 opacity-0 cursor-pointer"
-          style={{ width: "100%", height: "100%", fontSize: "16px" }}
+          style={{ width: "100%", height: "100%" }}
         />
       </label>
 

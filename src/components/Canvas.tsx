@@ -487,7 +487,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
         {/* 网格控制 - 唯一入口，去重 */}
         <div className="flex items-center gap-1">
-          <label className="flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-1 text-xs cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={snapToGrid}
