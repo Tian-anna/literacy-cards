@@ -138,6 +138,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     canvasScale,
   ]);
 
+  // Safari 触摸事件
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -150,8 +151,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
 
-      e.preventDefault();
-      e.stopPropagation();
+      // Safari: 阻止默认行为防止页面滚动
+      // e.preventDefault(); // 注意：这可能会阻止滚动，根据需要开启
 
       const touch = e.touches[0];
       touchStartX = touch.clientX;
@@ -165,7 +166,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       longPressTimerRef.current = setTimeout(() => {
         isLongPressRef.current = true;
         setShowControls(true);
-        // 震动反馈（如果支持）
         if (navigator.vibrate) {
           navigator.vibrate(50);
         }
@@ -190,8 +190,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
 
-      e.preventDefault();
-      e.stopPropagation();
+      // Safari: 阻止默认行为
+      // e.preventDefault();
 
       const touch = e.touches[0];
       const dx = (touch.clientX - dragStartRef.current.x) / canvasScale;
@@ -273,7 +273,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       isLongPressRef.current = false;
     };
 
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    // Safari 需要 { passive: false }
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: false });
     el.addEventListener("touchcancel", onTouchEnd, { passive: false });
@@ -300,7 +301,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     canvasScale,
   ]);
 
-  // 点击其他地方隐藏控制按钮
   useEffect(() => {
     if (!showControls) return;
 
@@ -318,26 +318,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       document.removeEventListener("touchstart", handleClick);
     };
   }, [showControls]);
-
-  const handleDelete = useCallback(
-    (e: any) => {
-      e.stopPropagation();
-      const { removeCard } = useStore.getState();
-      removeCard(card.instanceId);
-      setShowControls(false);
-    },
-    [card.instanceId],
-  );
-
-  const handleRotate = useCallback(
-    (e: any) => {
-      e.stopPropagation();
-      updateCard(card.instanceId, {
-        rotation: (card.rotation + 15) % 360,
-      });
-    },
-    [card.instanceId, card.rotation, updateCard],
-  );
 
   return (
     <div
@@ -361,11 +341,16 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         WebkitTouchCallout: "none",
         WebkitUserSelect: "none",
         userSelect: "none",
+        WebkitUserDrag: "none",
+        WebkitTapHighlightColor: "transparent",
       }}
       onMouseDown={handleMouseDown}
     >
       {isSelected && selectedIds.size > 1 && (
-        <div className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-[9px] z-10">
+        <div
+          className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white z-10"
+          style={{ fontSize: "9px" }}
+        >
           {selectedIds.size}
         </div>
       )}
@@ -376,18 +361,25 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           alt={image.name}
           className="w-full h-full object-cover rounded-lg pointer-events-none"
           draggable={false}
+          style={{
+            WebkitUserDrag: "none",
+            userSelect: "none",
+            WebkitTouchCallout: "none",
+          }}
           onError={() => {
             console.error("画布图片加载失败:", image.src);
             setImageLoaded(false);
           }}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 bg-gray-100 rounded-lg">
+        <div
+          className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100 rounded-lg"
+          style={{ fontSize: "10px" }}
+        >
           {image.name || "?"}
         </div>
       )}
 
-      {/* 控制按钮 - 放在卡片外部右上角，避免被裁剪 */}
       {(isSelected || showControls) && (
         <div
           className="absolute -top-6 -right-6 flex gap-1 z-50 p-2"
@@ -396,7 +388,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
-            className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md border border-white"
+            className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-md border border-white"
+            style={{ fontSize: "10px" }}
             onClick={(e) => {
               e.stopPropagation();
               updateCard(card.instanceId, {
@@ -408,7 +401,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
             ↻
           </button>
           <button
-            className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-md border border-white"
+            className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md border border-white"
+            style={{ fontSize: "10px" }}
             onClick={(e) => {
               e.stopPropagation();
               const { removeCard } = useStore.getState();
@@ -422,9 +416,11 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         </div>
       )}
 
-      {/* 长按提示 */}
       {showControls && !isSelected && (
-        <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[8px] text-gray-500 whitespace-nowrap">
+        <div
+          className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-gray-500 whitespace-nowrap"
+          style={{ fontSize: "8px" }}
+        >
           长按菜单
         </div>
       )}

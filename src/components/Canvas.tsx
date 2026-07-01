@@ -46,31 +46,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   const [isBoxSelecting, setIsBoxSelecting] = useState(false);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
-  const [showColorPicker, setShowColorPicker] = useState(false);
   const isTouchBoxSelectingRef = useRef(false);
   const touchBoxStartRef = useRef({ x: 0, y: 0 });
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0 });
 
-  // 双指缩放相关
   const pinchStartRef = useRef({ distance: 0, scale: 1 });
   const isPinchingRef = useRef(false);
-  const pinchCenterRef = useRef({ x: 0, y: 0 });
-
-  const presetColors = [
-    "#e8e8e8",
-    "#ffffff",
-    "#f5f5dc",
-    "#e0f2f1",
-    "#fff3e0",
-    "#fce4ec",
-    "#e8eaf6",
-    "#e0f7fa",
-    "#f1f8e9",
-    "#3e2723",
-    "#1a1a2e",
-    "#0d3b66",
-  ];
 
   const getCanvasPoint = useCallback(
     (clientX: number, clientY: number) => {
@@ -114,7 +96,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     (e: React.MouseEvent) => {
       const buttons = e.buttons;
 
-      // 中键(4)或左键(1)+Alt = 平移画布
       if (buttons === 4 || (buttons === 1 && e.altKey)) {
         isPanningRef.current = true;
         panStartRef.current = {
@@ -145,7 +126,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     [getCanvasPoint, clearSelection, canvasOffset],
   );
 
-  // 滚轮缩放 - 阻止浏览器默认缩放
+  // 滚轮缩放
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
@@ -155,7 +136,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     }
   }, []);
 
-  // 阻止 Ctrl+滚轮的浏览器默认行为
+  // 阻止 Safari 默认行为
   useEffect(() => {
     const preventBrowserZoom = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -175,6 +156,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
   }, []);
 
+  // 鼠标移动和释放
   useEffect(() => {
     if (!isBoxSelecting && !isPanningRef.current) return;
 
@@ -225,35 +207,35 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
   }, [isBoxSelecting, getCanvasPoint, getCardsInBox, selectionBox]);
 
+  // Safari 触摸事件处理
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     let touchStartTime = 0;
     let hasMoved = false;
+    let initialDistance = 0;
+    let initialScale = 1;
 
     const onTouchStart = (e: TouchEvent) => {
       // 双指缩放开始
       if (e.touches.length === 2) {
+        e.preventDefault();
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
-        const distance = Math.hypot(
+        initialDistance = Math.hypot(
           touch2.clientX - touch1.clientX,
           touch2.clientY - touch1.clientY,
         );
-        pinchStartRef.current = { distance, scale: canvasScale };
+        initialScale = canvasScale;
         isPinchingRef.current = true;
-        pinchCenterRef.current = {
-          x: (touch1.clientX + touch2.clientX) / 2,
-          y: (touch1.clientY + touch2.clientY) / 2,
-        };
         return;
       }
 
+      // 单指
       const touch = e.touches[0];
       const target = e.target as HTMLElement;
       if (target.closest(".placed-card")) return;
-
       if (!canvas.contains(target)) return;
 
       const point = getCanvasPoint(touch.clientX, touch.clientY);
@@ -269,7 +251,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      // 双指缩放处理
+      // 双指缩放
       if (e.touches.length === 2 && isPinchingRef.current) {
         e.preventDefault();
         const touch1 = e.touches[0];
@@ -279,14 +261,15 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           touch2.clientY - touch1.clientY,
         );
 
-        if (pinchStartRef.current.distance > 0) {
-          const scale =
-            (distance / pinchStartRef.current.distance) *
-            pinchStartRef.current.scale;
-          setCanvasScale(Math.max(0.3, Math.min(3, scale)));
+        if (initialDistance > 0) {
+          const newScale = (distance / initialDistance) * initialScale;
+          setCanvasScale(Math.max(0.3, Math.min(3, newScale)));
         }
         return;
       }
+
+      // 单指移动
+      if (e.touches.length !== 1) return;
 
       const target = e.target as HTMLElement;
       if (!canvas.contains(target)) return;
@@ -300,8 +283,8 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         !isTouchBoxSelectingRef.current &&
         (Math.abs(dx) > 10 || Math.abs(dy) > 10)
       ) {
-        isTouchBoxSelectingRef.current = true;
         hasMoved = true;
+        isTouchBoxSelectingRef.current = true;
         setSelectionBox({
           startX: touchBoxStartRef.current.x,
           startY: touchBoxStartRef.current.y,
@@ -331,11 +314,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       }
     };
 
-    const onTouchEnd = () => {
-      // 双指缩放结束
+    const onTouchEnd = (e: TouchEvent) => {
+      // 双指结束
       if (isPinchingRef.current) {
         isPinchingRef.current = false;
-        pinchStartRef.current = { distance: 0, scale: 1 };
+        initialDistance = 0;
         return;
       }
 
@@ -348,19 +331,32 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       }
     };
 
-    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+    // Safari 需要 { passive: false } 才能阻止默认行为
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
     canvas.addEventListener("touchmove", onTouchMove, { passive: false });
-    canvas.addEventListener("touchend", onTouchEnd, { passive: true });
-    canvas.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", onTouchEnd, { passive: false });
+
+    // 阻止 Safari 双击缩放
+    const preventDoubleTap = (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("touchstart", preventDoubleTap, {
+      passive: false,
+    });
 
     return () => {
       canvas.removeEventListener("touchstart", onTouchStart);
       canvas.removeEventListener("touchmove", onTouchMove);
       canvas.removeEventListener("touchend", onTouchEnd);
       canvas.removeEventListener("touchcancel", onTouchEnd);
+      document.removeEventListener("touchstart", preventDoubleTap);
     };
   }, [getCanvasPoint, getCardsInBox, clearSelection, canvasScale]);
 
+  // 键盘快捷键
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "a") {
@@ -431,9 +427,12 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
   return (
     <div className="w-full h-full flex flex-col relative">
-      {/* 绿色菜单栏 - 参考图3样式：绿色底，白色圆角方形按钮，按钮间距 */}
-      <div className="flex-shrink-0 flex items-center gap-1 px-2 py-2 bg-green-500 text-white z-10 overflow-x-auto">
-        {/* 画布颜色 - 直接显示颜色选择器 */}
+      {/* 顶部工具栏 */}
+      <div
+        className="flex-shrink-0 flex items-center gap-1 px-2 py-2 bg-green-500 text-white z-10 overflow-x-auto"
+        style={{ fontSize: "10px" }}
+      >
+        {/* 画布颜色 */}
         <div className="relative">
           <label
             className="w-6 h-6 rounded-full border-2 border-gray-300 shadow-sm flex items-center justify-center cursor-pointer overflow-hidden"
@@ -446,27 +445,32 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
               title="画布颜色"
             />
-            <span className="text-[8px] pointer-events-none">🎨</span>
+            <span style={{ fontSize: "8px", pointerEvents: "none" }}>🎨</span>
           </label>
         </div>
 
         <div className="w-px h-4 bg-white/30 mx-0.5" />
 
-        {/* 缩放控制 - 白色圆角方形按钮 */}
+        {/* 缩放控制 */}
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => setCanvasScale((prev) => Math.max(0.3, prev - 0.2))}
-            className="w-6 h-6 bg-white text-green-600 rounded-lg text-xs hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
+            className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
+            style={{ fontSize: "10px" }}
             title="缩小"
           >
             −
           </button>
-          <span className="text-[10px] font-medium w-10 text-center whitespace-nowrap">
+          <span
+            className="font-medium w-10 text-center whitespace-nowrap"
+            style={{ fontSize: "10px" }}
+          >
             {Math.round(canvasScale * 100)}%
           </span>
           <button
             onClick={() => setCanvasScale((prev) => Math.min(3, prev + 0.2))}
-            className="w-6 h-6 bg-white text-green-600 rounded-lg text-xs hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
+            className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
+            style={{ fontSize: "10px" }}
             title="放大"
           >
             +
@@ -476,7 +480,8 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasScale(1);
               setCanvasOffset({ x: 0, y: 0 });
             }}
-            className="w-6 h-6 bg-white text-green-600 rounded-lg text-xs hover:bg-green-50 flex items-center justify-center shadow-sm transition-colors"
+            className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm transition-colors"
+            style={{ fontSize: "10px" }}
             title="重置"
           >
             ⌂
@@ -485,9 +490,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
         <div className="w-px h-4 bg-white/30 mx-0.5" />
 
-        {/* 网格控制 - 唯一入口，去重 */}
+        {/* 网格控制 */}
         <div className="flex items-center gap-1">
-          <label className="flex items-center gap-1 text-xs cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={snapToGrid}
@@ -496,7 +501,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             />
             吸附
           </label>
-          <label className="flex items-center gap-0.5 text-xs cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-0.5 cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={showGrid}
@@ -506,7 +511,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             网格
           </label>
           <div className="flex items-center gap-1">
-            <span className="text-xs whitespace-nowrap">{gridSize}px</span>
+            <span className="whitespace-nowrap">{gridSize}px</span>
             <input
               type="range"
               min="10"
@@ -520,7 +525,10 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
         {selectedIds.size > 0 && (
           <div className="flex items-center gap-1 flex-shrink-0">
-            <span className="text-[9px] font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap">
+            <span
+              className="font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap"
+              style={{ fontSize: "9px" }}
+            >
               已选 {selectedIds.size} 张
             </span>
             <button
@@ -529,7 +537,8 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
                 selectedIds.forEach((id) => removeCard(id));
                 clearSelection();
               }}
-              className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs shadow-sm hover:bg-red-600"
+              className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm hover:bg-red-600"
+              style={{ fontSize: "10px" }}
               title="删除全部选中"
             >
               ×
@@ -538,6 +547,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         )}
       </div>
 
+      {/* 画布区域 */}
       <div
         ref={canvasRef}
         className="flex-1 relative overflow-hidden p-0"
@@ -545,10 +555,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         onWheel={handleWheel}
         style={{
           backgroundColor: canvasColor,
-          touchAction: "pan-x pan-y pinch-zoom",
+          touchAction: "none",
           userSelect: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",
+          WebkitTapHighlightColor: "transparent",
           cursor: isBoxSelecting
             ? "crosshair"
             : isPanningRef.current
@@ -556,7 +567,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               : "default",
         }}
       >
-        {/* 画布内容容器（带缩放和平移） */}
+        {/* 画布内容容器 */}
         <div
           style={{
             transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${canvasScale})`,
@@ -568,7 +579,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             left: 0,
           }}
         >
-          {/* 网格线 - 修复显示 */}
+          {/* 网格线 */}
           {showGrid && (
             <div
               className="absolute pointer-events-none"
@@ -609,9 +620,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         {placedCards.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center">
-              <p className="text-[10px] text-gray-400 mb-2">👆</p>
-              <p className="text-[10px] text-gray-400">点击下方图库选择图片</p>
-              <p className="text-[10px] text-gray-300 mt-1">
+              <p className="text-gray-400 mb-2" style={{ fontSize: "10px" }}>
+                👆
+              </p>
+              <p className="text-gray-400" style={{ fontSize: "10px" }}>
+                点击下方图库选择图片
+              </p>
+              <p className="text-gray-300 mt-1" style={{ fontSize: "10px" }}>
                 拖拽移动 · 双指缩放 · 双指旋转
               </p>
             </div>

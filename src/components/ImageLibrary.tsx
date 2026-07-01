@@ -350,7 +350,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="flex items-center gap-1 font-medium text-gray-700 hover:text-gray-900"
-            style={{ fontSize: "10px" }}
           >
             <span>{isExpanded ? "▼" : "▶"}</span>
             <span>图片图库</span>
