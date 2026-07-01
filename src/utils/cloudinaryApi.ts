@@ -10,10 +10,7 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
 
   const res = await fetch(
     `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-    {
-      method: "POST",
-      body: formData,
-    },
+    { method: "POST", body: formData },
   );
 
   if (!res.ok) {
@@ -23,7 +20,6 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
 
   const data = await res.json();
 
-  // Save to Supabase
   const { error } = await supabase.from("cloud_images").insert({
     name: file.name.replace(/\.[^/.]+$/, ""),
     url: data.secure_url,
@@ -32,7 +28,7 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   });
 
   if (error) {
-    console.error("Supabase insert failed:", error);
+    console.error("Supabase insert error:", error);
   }
 
   return data.secure_url;
@@ -45,7 +41,7 @@ export async function getCloudinaryImages() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Get cloud images failed:", error);
+    console.error("Get cloud images error:", error);
     return [];
   }
 
@@ -58,9 +54,41 @@ export async function getCloudinaryImageCount() {
     .select("*", { count: "exact", head: true });
 
   if (error) {
-    console.error("Get cloud count failed:", error);
+    console.error("Get cloud count error:", error);
     return 0;
   }
 
   return count || 0;
+}
+
+// 删除云端图片
+export async function deleteCloudImage(public_id: string): Promise<boolean> {
+  console.log("Deleting cloud image:", public_id);
+
+  const { error } = await supabase
+    .from("cloud_images")
+    .delete()
+    .eq("public_id", public_id);
+
+  if (error) {
+    console.error("Delete error:", error);
+    throw new Error(error.message);
+  }
+
+  console.log("Delete success");
+  return true;
+}
+
+// 清空所有云端图片
+export async function clearAllCloudImages(): Promise<boolean> {
+  console.log("Clearing all cloud images");
+
+  const { error } = await supabase.from("cloud_images").delete().neq("id", 0); // 删除所有记录
+
+  if (error) {
+    console.error("Clear error:", error);
+    throw new Error(error.message);
+  }
+
+  return true;
 }

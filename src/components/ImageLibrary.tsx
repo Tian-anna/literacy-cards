@@ -10,6 +10,8 @@ import { CardImage } from "@/types";
 import {
   getCloudinaryImages,
   getCloudinaryImageCount,
+  deleteCloudImage,
+  clearAllCloudImages,
 } from "@/utils/cloudinaryApi";
 
 interface ImageLibraryProps {
@@ -50,6 +52,17 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [isManagingCategories, setIsManagingCategories] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isCleaning, setIsCleaning] = useState(false);
+  const [cloudImages, setCloudImages] = useState<
+    Array<{
+      id: number;
+      name: string;
+      url: string;
+      public_id: string;
+      category: string;
+      created_at: string;
+    }>
+  >([]);
+  const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // 使用 useRef 而不是 useState 来跟踪拖拽状态，避免重渲染
@@ -71,9 +84,24 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   }, []);
 
+  // 获取云端图片列表
+  const fetchCloudImages = useCallback(async () => {
+    setIsLoadingCloud(true);
+    try {
+      const images = await getCloudinaryImages();
+      setCloudImages(images);
+    } catch (error) {
+      console.error("获取云端图片失败:", error);
+      setCloudImages([]);
+    } finally {
+      setIsLoadingCloud(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchCloudCount();
-  }, [fetchCloudCount]);
+    fetchCloudImages();
+  }, [fetchCloudCount, fetchCloudImages]);
 
   // 拖拽调整宽度 - 支持鼠标和触摸事件
   useEffect(() => {
@@ -234,6 +262,34 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
+  // 删除单张云端图片
+  const handleDeleteCloudImage = async (public_id: string) => {
+    if (!confirm("确定删除这张云端图片吗？")) return;
+
+    try {
+      await deleteCloudImage(public_id);
+      await fetchCloudImages();
+      await fetchCloudCount();
+      alert("删除成功！");
+    } catch (error) {
+      alert("删除失败：" + (error as Error).message);
+    }
+  };
+
+  // 清空所有云端图片
+  const handleClearAllCloud = async () => {
+    if (!confirm("确定清空所有云端图片吗？此操作不可恢复！")) return;
+
+    try {
+      await clearAllCloudImages();
+      await fetchCloudImages();
+      await fetchCloudCount();
+      alert("清空成功！");
+    } catch (error) {
+      alert("清空失败：" + (error as Error).message);
+    }
+  };
+
   const handleImageClick = (imageId: string) => {
     if (isBatchMode) {
       setSelectedImages((prev) => {
@@ -319,13 +375,24 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <div className="flex items-center justify-between text-xs text-gray-500">
                 <span>云端:</span>
-                {isLoadingCloudCount ? (
-                  <span className="animate-pulse">加载中...</span>
-                ) : cloudCount !== null ? (
-                  <span className="text-green-600">{cloudCount} 张</span>
-                ) : (
-                  <span className="text-red-400">获取失败</span>
-                )}
+                <div className="flex items-center gap-2">
+                  {isLoadingCloudCount ? (
+                    <span className="animate-pulse">加载中...</span>
+                  ) : cloudCount !== null ? (
+                    <span className="text-green-600">{cloudCount} 张</span>
+                  ) : (
+                    <span className="text-red-400">获取失败</span>
+                  )}
+                  {cloudCount !== null && cloudCount > 0 && (
+                    <button
+                      onClick={handleClearAllCloud}
+                      className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-500 rounded hover:bg-red-200"
+                      title="清空云端"
+                    >
+                      清空
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -349,6 +416,41 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 )}
               </button>
             </div>
+
+            {/* 云端图片列表 */}
+            {cloudImages.length > 0 && (
+              <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100 max-h-32 overflow-y-auto">
+                <div className="text-[10px] text-gray-400 mb-1">云端图片:</div>
+                <div className="grid grid-cols-4 gap-1">
+                  {cloudImages.map((img) => (
+                    <div
+                      key={img.id}
+                      className="relative aspect-square rounded overflow-hidden border border-gray-200 group"
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                      {/* 删除按钮 */}
+                      <button
+                        onClick={() => handleDeleteCloudImage(img.public_id)}
+                        className="absolute top-0 right-0 w-4 h-4 bg-red-500/80 hover:bg-red-600 text-white text-[10px] rounded-bl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        ×
+                      </button>
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[8px] px-0.5 truncate text-center">
+                        {img.name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 分类筛选 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
