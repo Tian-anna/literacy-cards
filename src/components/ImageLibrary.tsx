@@ -455,7 +455,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             <div className="flex-shrink-0 px-3 py-1 border-b border-gray-100 flex gap-2">
               <button
                 onClick={() => handleSort("name")}
-                className={`text-[9px] px-2 py-0.5 rounded flex items-center gap-1 ${
+                className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
                   sortBy === "name"
                     ? "bg-green-500 text-white"
                     : "bg-gray-100 text-gray-600"
@@ -483,7 +483,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setIsBatchMode(!isBatchMode);
                   setSelectedImages(new Set());
                 }}
-                className={`flex-1 px-2 py-1 rounded text-[9px] ${
+                className={`flex-1 px-2 py-1 rounded text-xs ${
                   isBatchMode
                     ? "bg-orange-500 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -509,7 +509,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   <div className="ml-auto flex gap-1">
                     <button
                       onClick={handleSelectAll}
-                      className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-[9px] hover:bg-blue-200"
+                      className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs hover:bg-blue-200"
                     >
                       全选
                     </button>
@@ -641,7 +641,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                           </button>
                         )}
 
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[8px] px-1 py-0.5 truncate text-center">
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-1 py-0.5 truncate text-center">
                           {image.name}
                         </div>
                       </div>
@@ -653,7 +653,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       <button
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={page <= 1}
-                        className="px-2 py-0.5 text-[9px] rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         ← 上一页
                       </button>
