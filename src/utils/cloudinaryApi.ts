@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 
-const CLOUD_NAME = "kqvg4iw";
+const CLOUD_NAME = "kqcvg4iw";
 const UPLOAD_PRESET = "literacy-cards";
 
 export async function uploadImageToCloudinary(file: File): Promise<string> {
@@ -18,21 +18,21 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
 
   if (!res.ok) {
     const error = await res.json();
-    throw new Error(error.error?.message || `上传失败 (${res.status})`);
+    throw new Error(error.error?.message || `Upload failed (${res.status})`);
   }
 
   const data = await res.json();
 
-  // 保存到 Supabase
+  // Save to Supabase
   const { error } = await supabase.from("cloud_images").insert({
     name: file.name.replace(/\.[^/.]+$/, ""),
     url: data.secure_url,
     public_id: data.public_id,
-    category: "云端",
+    category: "cloud",
   });
 
   if (error) {
-    console.error("Supabase 插入失败:", error);
+    console.error("Supabase insert failed:", error);
   }
 
   return data.secure_url;
@@ -45,7 +45,7 @@ export async function getCloudinaryImages() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("获取云端图片失败:", error);
+    console.error("Get cloud images failed:", error);
     return [];
   }
 
@@ -58,7 +58,7 @@ export async function getCloudinaryImageCount() {
     .select("*", { count: "exact", head: true });
 
   if (error) {
-    console.error("获取云端数量失败:", error);
+    console.error("Get cloud count failed:", error);
     return 0;
   }
 
