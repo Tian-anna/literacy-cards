@@ -317,36 +317,41 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
 
   // 清理无效图片（使用 cloudinaryApi 中的新方法）
   const handleCleanInvalid = async () => {
-    if (
-      !confirm(
-        "确定清理所有无效图片吗？\n这会检查每张图片是否可访问，并删除无效记录。",
-      )
-    )
-      return;
+    if (!confirm("确定清理所有无效图片吗？\n\n这会：\n1. 检查每张云端图片是否可访问\n2. 删除不可访问的云端记录\n3. 清理 Cloudinary 示例图片记录\n4. 清理本地无效图片")) return;
 
     setIsCleaning(true);
     setLastCleanResult(null);
 
     try {
+    // 1. 清理本地无效图片
+    await useStore.getState().cleanInvalidImages();
+ // 2. 清理云端无效图片
+    try {
       const result = await cleanInvalidCloudImages();
       setLastCleanResult(result);
 
-      // 刷新数量
+      // 3. 刷新云端数量显示
       await fetchCloudCount();
 
-      const msg =
-        result.errors.length > 0
-          ? `清理完成！\n总计: ${result.total} 张\n检查: ${result.checked} 张\n无效: ${result.invalid} 张\n已删除: ${result.deleted} 张\n错误: ${result.errors.length} 个`
-          : `清理完成！\n总计: ${result.total} 张\n检查: ${result.checked} 张\n无效: ${result.invalid} 张\n已删除: ${result.deleted} 张`;
-
-      alert(msg);
-    } catch (e) {
-      console.error("清理失败:", e);
-      alert("清理失败: " + (e as Error).message);
-    } finally {
-      setIsCleaning(false);
+      // 显示结果
+    const messages = ["清理完成！"];
+    messages.push(`云端记录: ${result.total} 条`);
+    messages.push(`检查图片: ${result.checked} 张`);
+    messages.push(`发现无效: ${result.invalid} 张`);
+    messages.push(`已删除: ${result.deleted} 条`);
+    
+    if (result.errors.length > 0) {
+      messages.push(`错误: ${result.errors.length} 个`);
     }
-  };
+    
+    alert(messages.join("\n"));
+  } catch (e) {
+    console.error("清理失败:", e);
+    alert("清理失败: " + (e as Error).message);
+  } finally {
+    setIsCleaning(false);
+  }
+}
 
   return (
     <div className="h-full flex text-xs">
@@ -541,16 +546,18 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 onClick={handleCleanInvalid}
                 disabled={isCleaning}
                 className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200 disabled:opacity-50"
-                title="清理无效图片和示例图记录"
+                title="检查所有云端图片URL是否可访问，删除无效记录"
               >
                 {isCleaning ? "清理中..." : "清理无效"}
               </button>
             </div>
 
-            {/* 清理结果提示 */}
-            {lastCleanResult && lastCleanResult.deleted > 0 && (
+            {lastCleanResult && (
               <div className="flex-shrink-0 px-3 py-1 bg-yellow-50 border-b border-yellow-100 text-[10px] text-yellow-700">
-                上次清理: 删除 {lastCleanResult.deleted} 张无效图片
+                上次清理: 检查 {lastCleanResult.checked} 张, 
+                无效 {lastCleanResult.invalid} 张, 
+                删除 {lastCleanResult.deleted} 条
+                {lastCleanResult.errors.length > 0 && ` (错误 ${lastCleanResult.errors.length} 个)`}
               </div>
             )}
 

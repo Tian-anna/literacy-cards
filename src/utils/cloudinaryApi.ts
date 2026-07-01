@@ -99,7 +99,7 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("upload_preset", UPLOAD_PRESET);
-  formData.append("folder", "literacy-cards"); // ← 关键：放到指定文件夹
+  formData.append("folder", "literacy-cards"); // ← 放到指定文件夹
 
   const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
   console.log("Uploading to:", url);
@@ -124,7 +124,7 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
     url: data.secure_url,
     public_id: data.public_id,
     category: "cloud",
-    folder: "literacy-cards", // ← 记录文件夹信息
+    folder: "literacy-cards",
   });
 
   if (error) {
@@ -245,19 +245,21 @@ export async function clearAllCloudImages(): Promise<number> {
 // ========== 清理无效图片 ==========
 
 export interface CleanResult {
-  total: number;
-  checked: number;
-  invalid: number;
-  deleted: number;
-  errors: string[];
+  total: number; // Supabase 中总记录数
+  checked: number; // 实际检查了多少张
+  invalid: number; // 发现多少张无效
+  deleted: number; // 成功删除多少条记录
+  errors: string[]; // 错误信息
 }
 
 /**
- * 清理无效图片（检查 URL 是否可访问，删除无效记录）
- * 同时清理 Cloudinary 示例图片的记录
+ * 清理无效图片
+ * 1. 先清理 Cloudinary 示例图片的记录（这些不是用户上传的）
+ * 2. 检查剩余图片 URL 是否可访问
+ * 3. 删除不可访问的记录
  */
 export async function cleanInvalidCloudImages(): Promise<CleanResult> {
-  console.log("Cleaning invalid cloud images...");
+  console.log("开始清理无效云端图片...");
 
   const result: CleanResult = {
     total: 0,
@@ -267,68 +269,87 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     errors: [],
   };
 
-  // 1. 获取所有云端图片
+  // 1. 获取所有云端图片记录
   const { data: images, error } = await supabase
     .from("cloud_images")
     .select("*");
 
   if (error) {
-    console.error("Get images error:", error);
+    console.error("获取云端图片失败:", error);
     throw new Error(error.message);
   }
 
   if (!images || images.length === 0) {
+    console.log("云端没有图片记录");
     return result;
   }
 
   result.total = images.length;
+  console.log(`云端共有 ${images.length} 条记录`);
 
-  // 2. 先清理 Cloudinary 示例图片的记录（这些不是用户上传的）
+  // 2. 先清理 Cloudinary 示例图片的记录
   const sampleImages = images.filter((img) =>
     isCloudinarySample(img.public_id),
   );
   if (sampleImages.length > 0) {
-    console.log(
-      `发现 ${sampleImages.length} 张 Cloudinary 示例图片记录，准备清理...`,
-    );
+    console.log(`发现 ${sampleImages.length} 张 Cloudinary 示例图片记录`);
 
     for (const img of sampleImages) {
       try {
-        await supabase.from("cloud_images").delete().eq("id", img.id);
-        result.deleted++;
-        console.log("已清理示例图片记录:", img.public_id);
+        const { error: delError } = await supabase
+          .from("cloud_images")
+          .delete()
+          .eq("id", img.id);
+
+        if (delError) {
+          result.errors.push(
+            `删除示例图失败 ${img.public_id}: ${delError.message}`,
+          );
+        } else {
+          result.deleted++;
+          console.log("已清理示例图片记录:", img.public_id);
+        }
       } catch (e) {
-        result.errors.push(`清理示例图失败: ${img.public_id}`);
+        result.errors.push(`删除示例图异常 ${img.public_id}: ${e}`);
       }
     }
   }
 
-  // 3. 检查剩余图片的可访问性
+  // 3. 检查用户上传图片的可访问性
   const userImages = images.filter((img) => !isCloudinarySample(img.public_id));
   const invalidIds: number[] = [];
 
   for (const img of userImages) {
     result.checked++;
     const isAccessible = await checkImageAccessible(img.url);
+
     if (!isAccessible) {
       invalidIds.push(img.id);
       result.invalid++;
-      console.log("发现无效图片:", img.public_id, img.url);
+      console.log("发现无效图片:", img.name, img.url);
     }
   }
 
   // 4. 删除无效记录
   for (const id of invalidIds) {
     try {
-      await supabase.from("cloud_images").delete().eq("id", id);
-      result.deleted++;
+      const { error: delError } = await supabase
+        .from("cloud_images")
+        .delete()
+        .eq("id", id);
+
+      if (delError) {
+        result.errors.push(`删除无效图片失败 id=${id}: ${delError.message}`);
+      } else {
+        result.deleted++;
+      }
     } catch (e) {
-      result.errors.push(`删除无效图片失败: id=${id}`);
+      result.errors.push(`删除无效图片异常 id=${id}: ${e}`);
     }
   }
 
   console.log(
-    `清理完成: 总计 ${result.total}, 检查 ${result.checked}, 无效 ${result.invalid}, 删除 ${result.deleted}`,
+    `清理完成: 总计 ${result.total} 条, 检查 ${result.checked} 张, 无效 ${result.invalid} 张, 删除 ${result.deleted} 条`,
   );
 
   return result;
