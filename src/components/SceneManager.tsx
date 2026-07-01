@@ -125,7 +125,7 @@ const SceneManager: React.FC = () => {
           onChange={handleFileUpload}
           disabled={isUploading}
           className="absolute inset-0 opacity-0 cursor-pointer"
-          style={{ width: "100%", height: "100%", fontSize: "100px" }}
+          style={{ width: "100%", height: "100%", fontSize: "16px" }}
         />
       </label>
 

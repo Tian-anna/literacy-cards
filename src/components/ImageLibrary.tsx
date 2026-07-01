@@ -392,7 +392,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       onClick={handleAddCategory}
                       className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
                     >
-                      添加
+                      <span>添加</span>
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1">
