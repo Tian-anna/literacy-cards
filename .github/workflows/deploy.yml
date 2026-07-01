@@ -35,6 +35,7 @@ jobs:
         env:
           VITE_CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           VITE_CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+          VITE_CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
