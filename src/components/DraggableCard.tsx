@@ -323,27 +323,29 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     <div
       ref={cardRef}
       className="placed-card absolute select-none"
-      style={{
-        left: card.x,
-        top: card.y,
-        width: 120 * card.scale,
-        height: 120 * card.scale,
-        zIndex: card.zIndex,
-        transform: `rotate(${card.rotation}deg)`,
-        cursor: isDragging ? "grabbing" : "grab",
-        border: isSelected ? "3px solid #4CAF50" : "2px solid transparent",
-        borderRadius: "8px",
-        boxShadow: isSelected
-          ? "0 4px 12px rgba(76,175,80,0.4)"
-          : "0 2px 8px rgba(0,0,0,0.1)",
-        transition: isDragging ? "none" : "box-shadow 0.2s",
-        touchAction: "none",
-        WebkitTouchCallout: "none",
-        WebkitUserSelect: "none",
-        userSelect: "none",
-        WebkitUserDrag: "none",
-        WebkitTapHighlightColor: "transparent",
-      }}
+      style={
+        {
+          left: card.x,
+          top: card.y,
+          width: 120 * card.scale,
+          height: 120 * card.scale,
+          zIndex: card.zIndex,
+          transform: `rotate(${card.rotation}deg)`,
+          cursor: isDragging ? "grabbing" : "grab",
+          border: isSelected ? "3px solid #4CAF50" : "2px solid transparent",
+          borderRadius: "8px",
+          boxShadow: isSelected
+            ? "0 4px 12px rgba(76,175,80,0.4)"
+            : "0 2px 8px rgba(0,0,0,0.1)",
+          transition: isDragging ? "none" : "box-shadow 0.2s",
+          touchAction: "none",
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          userSelect: "none",
+          WebkitTapHighlightColor: "transparent",
+          // 删除 WebkitUserDrag，改用下面的方式
+        } as React.CSSProperties
+      }
       onMouseDown={handleMouseDown}
     >
       {isSelected && selectedIds.size > 1 && (
@@ -362,7 +364,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           className="w-full h-full object-cover rounded-lg pointer-events-none"
           draggable={false}
           style={{
-            WebkitUserDrag: "none",
             userSelect: "none",
             WebkitTouchCallout: "none",
           }}
