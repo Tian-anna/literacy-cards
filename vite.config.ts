@@ -4,7 +4,7 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/literacy-cards/", // ← 添加这行
+  base: "/", // ← 添加这行
   build: {
     target: "safari11", // 兼容 Safari 11+
     // 或 target: "es2015"  // 兼容 Safari 9+
