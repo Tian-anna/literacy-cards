@@ -3,6 +3,11 @@ import { supabase } from "./supabase";
 const CLOUD_NAME = "kqcvg4iw";
 const UPLOAD_PRESET = "literacy-cards";
 
+// Netlify Function 完整 URL
+const NETLIFY_API_URL = 'https://effervescent-kulfi-8283b0.netlify.app/.netlify/func
+
+tions/delete-cloudinary';
+
 console.log("Cloudinary config:");
 console.log("  Cloud Name:", CLOUD_NAME);
 console.log("  Upload Preset:", UPLOAD_PRESET);
@@ -191,7 +196,7 @@ export async function getCloudinaryImageCount(): Promise<number> {
   return filtered.length;
 }
 
-// ========== 删除（关键修改：同步删除 Cloudinary 和 Supabase） ==========
+// ========== 删除（调用 Netlify Function） ==========
 
 /**
  * 删除单张云端图片
@@ -208,24 +213,20 @@ export async function deleteCloudImage(public_id: string): Promise<boolean> {
 
   // 1. 先调用 Netlify Function 删除 Cloudinary 图片
   try {
-    const backendRes = await fetch("/.netlify/functions/delete-cloudinary", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const backendRes = await fetch(NETLIFY_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ public_id }),
     });
 
     if (!backendRes.ok) {
       const errorData = await backendRes.json().catch(() => ({}));
       console.error("删除 Cloudinary 图片失败:", errorData);
-      // 如果后端删除失败，继续尝试删除 Supabase 记录（至少保持数据库一致）
-      // 或者你可以选择抛出错误，阻止删除
-      // throw new Error(errorData.error || "删除 Cloudinary 图片失败");
     } else {
       console.log("Cloudinary 图片删除成功");
     }
   } catch (e) {
     console.error("调用后端删除 API 失败:", e);
-    // 网络错误时，继续删除 Supabase 记录
   }
 
   // 2. 删除 Supabase 记录
@@ -276,7 +277,9 @@ export async function clearAllCloudImages(): Promise<number> {
     }
   }
 
-  console.log(`已删除 ${deletedCount} 张图片，跳过了 ${sampleCount} 张示例图`);
+  console.log(
+    `已删除 ${deletedCount} 张图片，跳过了 ${sampleCount} 张示例图`,
+  );
   return deletedCount;
 }
 
@@ -374,9 +377,9 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     if (img) {
       try {
         // 尝试删除 Cloudinary 图片
-        await fetch("/.netlify/functions/delete-cloudinary", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        await fetch(NETLIFY_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ public_id: img.public_id }),
         });
       } catch (e) {
