@@ -51,13 +51,16 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0 });
 
-  const isTouchPanningRef = useRef(false);
-  const touchPanStartRef = useRef({ x: 0, y: 0 });
-  const lastPanOffsetRef = useRef({ x: 0, y: 0 });
-
-  const pinchStartRef = useRef({ distance: 0, scale: 1 });
   const isPinchingRef = useRef(false);
   const rafScaleRef = useRef<number | null>(null);
+
+  // 双指缩放/平移的状态
+  const pinchStateRef = useRef({
+    initialDistance: 0,
+    initialScale: 1,
+    startCenter: { x: 0, y: 0 },
+    startOffset: { x: 0, y: 0 },
+  });
 
   const getCanvasPoint = useCallback(
     (clientX: number, clientY: number) => {
@@ -131,15 +134,31 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     [getCanvasPoint, clearSelection, canvasOffset],
   );
 
-  // 滚轮缩放
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setCanvasScale((prev) => Math.max(0.3, Math.min(3, prev + delta)));
-    }
-  }, []);
+  // 滚轮缩放（以鼠标位置为中心）
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        const newScale = Math.max(0.3, Math.min(3, canvasScale + delta));
+
+        // 以鼠标位置为中心缩放
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          const scaleRatio = newScale / canvasScale;
+          setCanvasOffset({
+            x: mouseX - (mouseX - canvasOffset.x) * scaleRatio,
+            y: mouseY - (mouseY - canvasOffset.y) * scaleRatio,
+          });
+        }
+        setCanvasScale(newScale);
+      }
+    },
+    [canvasScale, canvasOffset],
+  );
 
   // 阻止 Safari 默认行为
   useEffect(() => {
@@ -219,30 +238,29 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
     let touchStartTime = 0;
     let hasMoved = false;
-    let initialDistance = 0;
-    let initialScale = 1;
-    let panStartDistance = 0;
-    let panStartCenter = { x: 0, y: 0 };
 
     const onTouchStart = (e: TouchEvent) => {
-      // 双指：缩放或平移
+      // 双指：缩放 + 平移
       if (e.touches.length === 2) {
         e.preventDefault();
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
-        initialDistance = Math.hypot(
+        const distance = Math.hypot(
           touch2.clientX - touch1.clientX,
           touch2.clientY - touch1.clientY,
         );
-        panStartDistance = initialDistance;
-        initialScale = canvasScale;
-        panStartCenter = {
+        const center = {
           x: (touch1.clientX + touch2.clientX) / 2,
           y: (touch1.clientY + touch2.clientY) / 2,
         };
-        lastPanOffsetRef.current = { ...canvasOffset };
+
+        pinchStateRef.current = {
+          initialDistance: distance,
+          initialScale: canvasScale,
+          startCenter: center,
+          startOffset: { ...canvasOffset },
+        };
         isPinchingRef.current = true;
-        isTouchPanningRef.current = false;
         isTouchBoxSelectingRef.current = false;
         return;
       }
@@ -258,7 +276,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       touchStartTime = Date.now();
       hasMoved = false;
       isTouchBoxSelectingRef.current = false;
-      isTouchPanningRef.current = false;
 
       const store = useStore.getState();
       if (store.selectedIds.size <= 1) {
@@ -267,7 +284,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      // 双指：缩放 + 平移
+      // 双指：缩放 + 平移（以双指中心为原点）
       if (e.touches.length === 2 && isPinchingRef.current) {
         e.preventDefault();
         const touch1 = e.touches[0];
@@ -276,28 +293,35 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           touch2.clientX - touch1.clientX,
           touch2.clientY - touch1.clientY,
         );
-
-        const currentCenter = {
+        const center = {
           x: (touch1.clientX + touch2.clientX) / 2,
           y: (touch1.clientY + touch2.clientY) / 2,
         };
 
-        // 缩放
-        if (initialDistance > 0) {
-          const newScale = (distance / initialDistance) * initialScale;
-          const clampedScale = Math.max(0.3, Math.min(3, newScale));
-          if (rafScaleRef.current) cancelAnimationFrame(rafScaleRef.current);
-          rafScaleRef.current = requestAnimationFrame(() => {
-            setCanvasScale(clampedScale);
-          });
+        const state = pinchStateRef.current;
+
+        // 计算新缩放
+        let newScale = canvasScale;
+        if (state.initialDistance > 0) {
+          newScale = (distance / state.initialDistance) * state.initialScale;
+          newScale = Math.max(0.3, Math.min(3, newScale));
         }
 
-        // 双指平移（画布跟随手指中心移动）
-        const dx = currentCenter.x - panStartCenter.x;
-        const dy = currentCenter.y - panStartCenter.y;
-        setCanvasOffset({
-          x: lastPanOffsetRef.current.x + dx,
-          y: lastPanOffsetRef.current.y + dy,
+        // 计算新偏移：保持双指中心点在世界坐标中位置不变
+        // worldX = (screenX - offset) / scale
+        // 要保持 worldX 不变：
+        // (center.x - newOffset) / newScale = (center.x - startOffset) / startScale
+        // newOffset = center.x - newScale * (center.x - startOffset) / startScale
+        const startScale = state.initialScale;
+        const newOffsetX =
+          center.x - (newScale * (center.x - state.startOffset.x)) / startScale;
+        const newOffsetY =
+          center.y - (newScale * (center.y - state.startOffset.y)) / startScale;
+
+        if (rafScaleRef.current) cancelAnimationFrame(rafScaleRef.current);
+        rafScaleRef.current = requestAnimationFrame(() => {
+          setCanvasScale(newScale);
+          setCanvasOffset({ x: newOffsetX, y: newOffsetY });
         });
         return;
       }
@@ -307,7 +331,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
       const target = e.target as HTMLElement;
       if (!canvas.contains(target)) return;
-      // 如果触摸的是卡片，让 DraggableCard 处理
       if (target.closest(".placed-card")) return;
 
       const touch = e.touches[0];
@@ -351,10 +374,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      // 双指结束
+      // 双指结束（可能还剩一个手指）
       if (isPinchingRef.current) {
+        if (e.touches.length >= 1) {
+          // 还剩手指，可能是双指变单指，继续处理
+          // 重置状态，让单指逻辑接管
+        }
         isPinchingRef.current = false;
-        initialDistance = 0;
         return;
       }
 
@@ -442,11 +468,34 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
       if ((e.ctrlKey || e.metaKey) && e.key === "+") {
         e.preventDefault();
-        setCanvasScale((prev) => Math.min(3, prev + 0.2));
+        const newScale = Math.min(3, canvasScale + 0.2);
+        // 以画布中心缩放
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+          const scaleRatio = newScale / canvasScale;
+          setCanvasOffset({
+            x: centerX - (centerX - canvasOffset.x) * scaleRatio,
+            y: centerY - (centerY - canvasOffset.y) * scaleRatio,
+          });
+        }
+        setCanvasScale(newScale);
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "-") {
         e.preventDefault();
-        setCanvasScale((prev) => Math.max(0.3, prev - 0.2));
+        const newScale = Math.max(0.3, canvasScale - 0.2);
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+          const scaleRatio = newScale / canvasScale;
+          setCanvasOffset({
+            x: centerX - (centerX - canvasOffset.x) * scaleRatio,
+            y: centerY - (centerY - canvasOffset.y) * scaleRatio,
+          });
+        }
+        setCanvasScale(newScale);
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "0") {
         e.preventDefault();
@@ -457,7 +506,17 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectAll, clearSelection, copy, paste, undo, redo, removeCard]);
+  }, [
+    selectAll,
+    clearSelection,
+    copy,
+    paste,
+    undo,
+    redo,
+    removeCard,
+    canvasScale,
+    canvasOffset,
+  ]);
 
   const selectionBoxStyle = useMemo(() => {
     if (!selectionBox) return null;
@@ -497,7 +556,20 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         {/* 缩放控制 */}
         <div className="flex items-center gap-0.5">
           <button
-            onClick={() => setCanvasScale((prev) => Math.max(0.3, prev - 0.2))}
+            onClick={() => {
+              const newScale = Math.max(0.3, canvasScale - 0.2);
+              const rect = canvasRef.current?.getBoundingClientRect();
+              if (rect) {
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const scaleRatio = newScale / canvasScale;
+                setCanvasOffset({
+                  x: centerX - (centerX - canvasOffset.x) * scaleRatio,
+                  y: centerY - (centerY - canvasOffset.y) * scaleRatio,
+                });
+              }
+              setCanvasScale(newScale);
+            }}
             className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
             style={{ fontSize: "10px" }}
             title="缩小"
@@ -511,7 +583,20 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
             {Math.round(canvasScale * 100)}%
           </span>
           <button
-            onClick={() => setCanvasScale((prev) => Math.min(3, prev + 0.2))}
+            onClick={() => {
+              const newScale = Math.min(3, canvasScale + 0.2);
+              const rect = canvasRef.current?.getBoundingClientRect();
+              if (rect) {
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const scaleRatio = newScale / canvasScale;
+                setCanvasOffset({
+                  x: centerX - (centerX - canvasOffset.x) * scaleRatio,
+                  y: centerY - (centerY - canvasOffset.y) * scaleRatio,
+                });
+              }
+              setCanvasScale(newScale);
+            }}
             className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
             style={{ fontSize: "10px" }}
             title="放大"
@@ -671,7 +756,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
                 点击下方图库选择图片
               </p>
               <p className="text-gray-300 mt-1" style={{ fontSize: "10px" }}>
-                拖拽移动 · 双指缩放 · 双指旋转
+                拖拽移动 · 双指缩放 · 双指平移
               </p>
             </div>
           </div>
