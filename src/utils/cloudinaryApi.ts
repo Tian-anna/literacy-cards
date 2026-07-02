@@ -17,7 +17,7 @@ export function isCloudinarySample(publicId: string): boolean {
     lower === "sample" ||
     lower.startsWith("sample/") ||
     lower.startsWith("samples/") ||
-    lower.startsWith("cld-sample") ||
+    lower.startsWith("cld-sample")
   );
 }
 
@@ -90,8 +90,10 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   const existing = await checkImageExists(fileName);
   if (existing) {
     const isAccessible = await checkImageAccessible(existing.url);
-  if (isAccessible) {
-    return existing.url;
+    if (isAccessible) {
+      return existing.url;
+    }
+    // 如果存在但不可访问，继续上传新图片
   }
 
   // 上传到 Cloudinary，指定 folder 参数隔离
@@ -123,7 +125,6 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
     url: data.secure_url,
     public_id: data.public_id,
     category: "cloud",
-    folder: "literacy-cards",
   });
 
   if (error) {
