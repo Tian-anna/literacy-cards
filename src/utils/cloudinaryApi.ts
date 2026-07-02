@@ -4,9 +4,8 @@ const CLOUD_NAME = "kqcvg4iw";
 const UPLOAD_PRESET = "literacy-cards";
 
 // Netlify Function 完整 URL
-const NETLIFY_API_URL = 'https://effervescent-kulfi-8283b0.netlify.app/.netlify/func
-
-tions/delete-cloudinary';
+const NETLIFY_API_URL =
+  "https://effervescent-kulfi-8283b0.netlify.app/.netlify/functions/delete-cloudinary";
 
 console.log("Cloudinary config:");
 console.log("  Cloud Name:", CLOUD_NAME);
@@ -214,8 +213,8 @@ export async function deleteCloudImage(public_id: string): Promise<boolean> {
   // 1. 先调用 Netlify Function 删除 Cloudinary 图片
   try {
     const backendRes = await fetch(NETLIFY_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ public_id }),
     });
 
@@ -277,9 +276,7 @@ export async function clearAllCloudImages(): Promise<number> {
     }
   }
 
-  console.log(
-    `已删除 ${deletedCount} 张图片，跳过了 ${sampleCount} 张示例图`,
-  );
+  console.log(`已删除 ${deletedCount} 张图片，跳过了 ${sampleCount} 张示例图`);
   return deletedCount;
 }
 
@@ -378,8 +375,8 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
       try {
         // 尝试删除 Cloudinary 图片
         await fetch(NETLIFY_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ public_id: img.public_id }),
         });
       } catch (e) {
