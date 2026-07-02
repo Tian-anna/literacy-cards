@@ -46,6 +46,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   const [isBoxSelecting, setIsBoxSelecting] = useState(false);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const isTouchBoxSelectingRef = useRef(false);
   const touchBoxStartRef = useRef({ x: 0, y: 0 });
   const isPanningRef = useRef(false);
@@ -61,6 +62,27 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     startCenter: { x: 0, y: 0 },
     startOffset: { x: 0, y: 0 },
   });
+
+  // 监听画布尺寸变化
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const updateSize = () => {
+      const rect = canvas.getBoundingClientRect();
+      setCanvasSize({ width: rect.width, height: rect.height });
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(canvas);
+
+    window.addEventListener("resize", updateSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateSize);
+    };
+  }, []);
 
   const getCanvasPoint = useCallback(
     (clientX: number, clientY: number) => {
@@ -98,6 +120,59 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       return selected;
     },
     [placedCards],
+  );
+
+  // 限制画布偏移，确保内容不会完全不可见
+  const clampCanvasOffset = useCallback(
+    (offset: { x: number; y: number }, scale: number) => {
+      // 如果没有任何卡片，不做限制
+      if (placedCards.length === 0) return offset;
+
+      // 计算所有卡片的包围盒
+      let minCardX = Infinity;
+      let minCardY = Infinity;
+      let maxCardX = -Infinity;
+      let maxCardY = -Infinity;
+
+      placedCards.forEach((card) => {
+        const w = 120 * (card.scale || 1);
+        const h = 120 * (card.scale || 1);
+        minCardX = Math.min(minCardX, card.x);
+        minCardY = Math.min(minCardY, card.y);
+        maxCardX = Math.max(maxCardX, card.x + w);
+        maxCardY = Math.max(maxCardY, card.y + h);
+      });
+
+      // 卡片在屏幕上的位置范围
+      const screenMinX = offset.x + minCardX * scale;
+      const screenMinY = offset.y + minCardY * scale;
+      const screenMaxX = offset.x + maxCardX * scale;
+      const screenMaxY = offset.y + maxCardY * scale;
+
+      let newX = offset.x;
+      let newY = offset.y;
+
+      // 如果所有卡片都在屏幕左侧，允许向右平移，但保留至少一个卡片在屏幕内
+      // 简化：确保至少能看到一部分内容
+      const padding = 50; // 允许超出边界的距离
+
+      // 限制 offset，使得内容不会完全移出可视区域
+      if (screenMaxX < -padding) {
+        newX = -padding - maxCardX * scale;
+      }
+      if (screenMinX > canvasSize.width + padding) {
+        newX = canvasSize.width + padding - minCardX * scale;
+      }
+      if (screenMaxY < -padding) {
+        newY = -padding - maxCardY * scale;
+      }
+      if (screenMinY > canvasSize.height + padding) {
+        newY = canvasSize.height + padding - minCardY * scale;
+      }
+
+      return { x: newX, y: newY };
+    },
+    [placedCards, canvasSize],
   );
 
   const handleCanvasMouseDown = useCallback(
@@ -149,15 +224,16 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           const mouseX = e.clientX - rect.left;
           const mouseY = e.clientY - rect.top;
           const scaleRatio = newScale / canvasScale;
-          setCanvasOffset({
+          const newOffset = {
             x: mouseX - (mouseX - canvasOffset.x) * scaleRatio,
             y: mouseY - (mouseY - canvasOffset.y) * scaleRatio,
-          });
+          };
+          setCanvasOffset(clampCanvasOffset(newOffset, newScale));
         }
         setCanvasScale(newScale);
       }
     },
-    [canvasScale, canvasOffset],
+    [canvasScale, canvasOffset, clampCanvasOffset],
   );
 
   // 阻止 Safari 默认行为
@@ -186,10 +262,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
     const handleMouseMove = (e: MouseEvent) => {
       if (isPanningRef.current) {
-        setCanvasOffset({
+        const newOffset = {
           x: e.clientX - panStartRef.current.x,
           y: e.clientY - panStartRef.current.y,
-        });
+        };
+        setCanvasOffset(clampCanvasOffset(newOffset, canvasScale));
         return;
       }
 
@@ -229,7 +306,14 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isBoxSelecting, getCanvasPoint, getCardsInBox, selectionBox]);
+  }, [
+    isBoxSelecting,
+    getCanvasPoint,
+    getCardsInBox,
+    selectionBox,
+    canvasScale,
+    clampCanvasOffset,
+  ]);
 
   // Safari 触摸事件处理
   useEffect(() => {
@@ -308,20 +392,21 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         }
 
         // 计算新偏移：保持双指中心点在世界坐标中位置不变
-        // worldX = (screenX - offset) / scale
-        // 要保持 worldX 不变：
-        // (center.x - newOffset) / newScale = (center.x - startOffset) / startScale
-        // newOffset = center.x - newScale * (center.x - startOffset) / startScale
         const startScale = state.initialScale;
         const newOffsetX =
           center.x - (newScale * (center.x - state.startOffset.x)) / startScale;
         const newOffsetY =
           center.y - (newScale * (center.y - state.startOffset.y)) / startScale;
 
+        const clampedOffset = clampCanvasOffset(
+          { x: newOffsetX, y: newOffsetY },
+          newScale,
+        );
+
         if (rafScaleRef.current) cancelAnimationFrame(rafScaleRef.current);
         rafScaleRef.current = requestAnimationFrame(() => {
           setCanvasScale(newScale);
-          setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+          setCanvasOffset(clampedOffset);
         });
         return;
       }
@@ -423,6 +508,8 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     clearSelection,
     canvasScale,
     canvasOffset,
+    clampCanvasOffset,
+    canvasSize,
   ]);
 
   // 键盘快捷键
@@ -469,16 +556,16 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "+") {
         e.preventDefault();
         const newScale = Math.min(3, canvasScale + 0.2);
-        // 以画布中心缩放
         const rect = canvasRef.current?.getBoundingClientRect();
         if (rect) {
           const centerX = rect.width / 2;
           const centerY = rect.height / 2;
           const scaleRatio = newScale / canvasScale;
-          setCanvasOffset({
+          const newOffset = {
             x: centerX - (centerX - canvasOffset.x) * scaleRatio,
             y: centerY - (centerY - canvasOffset.y) * scaleRatio,
-          });
+          };
+          setCanvasOffset(clampCanvasOffset(newOffset, newScale));
         }
         setCanvasScale(newScale);
       }
@@ -490,10 +577,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           const centerX = rect.width / 2;
           const centerY = rect.height / 2;
           const scaleRatio = newScale / canvasScale;
-          setCanvasOffset({
+          const newOffset = {
             x: centerX - (centerX - canvasOffset.x) * scaleRatio,
             y: centerY - (centerY - canvasOffset.y) * scaleRatio,
-          });
+          };
+          setCanvasOffset(clampCanvasOffset(newOffset, newScale));
         }
         setCanvasScale(newScale);
       }
@@ -516,6 +604,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     removeCard,
     canvasScale,
     canvasOffset,
+    clampCanvasOffset,
   ]);
 
   const selectionBoxStyle = useMemo(() => {
@@ -547,7 +636,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
               title="画布颜色"
             />
-            <span style={{ fontSize: "10px", pointerEvents: "none" }}>🎨</span>
+            <span style={{ fontSize: "8px", pointerEvents: "none" }}>🎨</span>
           </label>
         </div>
 
@@ -563,10 +652,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
                 const centerX = rect.width / 2;
                 const centerY = rect.height / 2;
                 const scaleRatio = newScale / canvasScale;
-                setCanvasOffset({
+                const newOffset = {
                   x: centerX - (centerX - canvasOffset.x) * scaleRatio,
                   y: centerY - (centerY - canvasOffset.y) * scaleRatio,
-                });
+                };
+                setCanvasOffset(clampCanvasOffset(newOffset, newScale));
               }
               setCanvasScale(newScale);
             }}
@@ -590,10 +680,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
                 const centerX = rect.width / 2;
                 const centerY = rect.height / 2;
                 const scaleRatio = newScale / canvasScale;
-                setCanvasOffset({
+                const newOffset = {
                   x: centerX - (centerX - canvasOffset.x) * scaleRatio,
                   y: centerY - (centerY - canvasOffset.y) * scaleRatio,
-                });
+                };
+                setCanvasOffset(clampCanvasOffset(newOffset, newScale));
               }
               setCanvasScale(newScale);
             }}
@@ -655,7 +746,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           <div className="flex items-center gap-1 flex-shrink-0">
             <span
               className="font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap"
-              style={{ fontSize: "10px" }}
+              style={{ fontSize: "9px" }}
             >
               已选 {selectedIds.size} 张
             </span>
@@ -730,6 +821,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               card={card}
               canvasScale={canvasScale}
               canvasOffset={canvasOffset}
+              canvasSize={canvasSize}
             />
           ))}
 

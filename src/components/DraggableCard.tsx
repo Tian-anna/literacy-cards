@@ -6,12 +6,14 @@ interface DraggableCardProps {
   card: PlacedCard;
   canvasScale?: number;
   canvasOffset?: { x: number; y: number };
+  canvasSize?: { width: number; height: number };
 }
 
 const DraggableCard: React.FC<DraggableCardProps> = ({
   card,
   canvasScale = 1,
   canvasOffset = { x: 0, y: 0 },
+  canvasSize = { width: 0, height: 0 },
 }) => {
   const {
     images,
@@ -46,6 +48,32 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
   }
 
   const isSelected = selectedIds.has(card.instanceId);
+
+  // 边界限制函数
+  const clampPosition = useCallback(
+    (x: number, y: number, cardW: number, cardH: number) => {
+      if (canvasSize.width <= 0 || canvasSize.height <= 0) {
+        return { x, y };
+      }
+
+      // 卡片在屏幕上的位置
+      // screenX = canvasOffset.x + x * canvasScale
+      // 限制：0 <= screenX <= canvasSize.width - cardW * canvasScale
+      // 即：-canvasOffset.x / canvasScale <= x <= (canvasSize.width - canvasOffset.x) / canvasScale - cardW
+
+      const minX = -canvasOffset.x / canvasScale;
+      const minY = -canvasOffset.y / canvasScale;
+      const maxX = (canvasSize.width - canvasOffset.x) / canvasScale - cardW;
+      const maxY = (canvasSize.height - canvasOffset.y) / canvasScale - cardH;
+
+      // 如果画布比卡片还小，至少让卡片左上角在可视区域内
+      const clampedX = Math.max(minX, Math.min(maxX, x));
+      const clampedY = Math.max(minY, Math.min(maxY, y));
+
+      return { x: clampedX, y: clampedY };
+    },
+    [canvasScale, canvasOffset, canvasSize],
+  );
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -110,6 +138,17 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         let newX = pos.x + dx;
         let newY = pos.y + dy;
 
+        // 获取该卡片的尺寸
+        const store = useStore.getState();
+        const c = store.placedCards.find((p) => p.instanceId === id);
+        const cardW = c ? 120 * (c.scale || 1) : 120;
+        const cardH = c ? 120 * (c.scale || 1) : 120;
+
+        // 应用边界限制
+        const clamped = clampPosition(newX, newY, cardW, cardH);
+        newX = clamped.x;
+        newY = clamped.y;
+
         if (snapToGrid) {
           newX = Math.round(newX / gridSize) * gridSize;
           newY = Math.round(newY / gridSize) * gridSize;
@@ -139,6 +178,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     updateCard,
     setIsDragging,
     canvasScale,
+    clampPosition,
   ]);
 
   // Safari 触摸事件
@@ -237,6 +277,17 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           let newX = pos.x + dx;
           let newY = pos.y + dy;
 
+          // 获取该卡片的尺寸
+          const store = useStore.getState();
+          const c = store.placedCards.find((p) => p.instanceId === id);
+          const cardW = c ? 120 * (c.scale || 1) : 120;
+          const cardH = c ? 120 * (c.scale || 1) : 120;
+
+          // 应用边界限制
+          const clamped = clampPosition(newX, newY, cardW, cardH);
+          newX = clamped.x;
+          newY = clamped.y;
+
           if (snapToGrid) {
             newX = Math.round(newX / gridSize) * gridSize;
             newY = Math.round(newY / gridSize) * gridSize;
@@ -306,6 +357,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     gridSize,
     setIsDragging,
     canvasScale,
+    clampPosition,
   ]);
 
   useEffect(() => {
@@ -357,7 +409,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       {isSelected && selectedIds.size > 1 && (
         <div
           className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white z-10"
-          style={{ fontSize: "10px" }}
+          style={{ fontSize: "9px" }}
         >
           {selectedIds.size}
         </div>
@@ -426,7 +478,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       {showControls && !isSelected && (
         <div
           className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-gray-500 whitespace-nowrap"
-          style={{ fontSize: "10px" }}
+          style={{ fontSize: "8px" }}
         >
           长按菜单
         </div>
