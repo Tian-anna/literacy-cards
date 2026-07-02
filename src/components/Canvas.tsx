@@ -547,7 +547,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
               title="画布颜色"
             />
-            <span style={{ fontSize: "8px", pointerEvents: "none" }}>🎨</span>
+            <span style={{ fontSize: "10px", pointerEvents: "none" }}>🎨</span>
           </label>
         </div>
 
@@ -655,7 +655,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           <div className="flex items-center gap-1 flex-shrink-0">
             <span
               className="font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap"
-              style={{ fontSize: "9px" }}
+              style={{ fontSize: "10px" }}
             >
               已选 {selectedIds.size} 张
             </span>

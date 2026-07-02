@@ -237,7 +237,7 @@ const SceneManager: React.FC = () => {
             className="bg-white rounded-xl p-6 w-96 max-w-[90%] text-gray-800"
             style={{ fontSize: "10px" }}
           >
-            <h3 className="font-bold mb-4" style={{ fontSize: "12px" }}>
+            <h3 className="font-bold mb-4" style={{ fontSize: "10px" }}>
               导入场景
             </h3>
             <textarea

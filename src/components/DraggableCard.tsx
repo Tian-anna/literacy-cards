@@ -357,7 +357,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       {isSelected && selectedIds.size > 1 && (
         <div
           className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white z-10"
-          style={{ fontSize: "9px" }}
+          style={{ fontSize: "10px" }}
         >
           {selectedIds.size}
         </div>
@@ -426,7 +426,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       {showControls && !isSelected && (
         <div
           className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-gray-500 whitespace-nowrap"
-          style={{ fontSize: "8px" }}
+          style={{ fontSize: "10px" }}
         >
           长按菜单
         </div>
