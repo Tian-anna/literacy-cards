@@ -1,41 +1,42 @@
-import type { Handler, HandlerEvent, HandlerContext } from '@netlify/func
-
-tions';
-import crypto from 'crypto';
+import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+import crypto from "crypto";
 
 function generateSHA1(input: string): string {
-  return crypto.createHash('sha1').update(input).digest('hex');
+  return crypto.createHash("sha1").update(input).digest("hex");
 }
 
-const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+const handler: Handler = async (
+  event: HandlerEvent,
+  context: HandlerContext,
+) => {
   // CORS 头 - 允许 GitHub Pages 访问
   const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 
   // 处理预检请求 (OPTIONS)
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers, body: '' };
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 204, headers, body: "" };
   }
 
   // 只允许 POST 请求
-  if (event.httpMethod !== 'POST') {
+  if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
       headers,
-      body: JSON.stringify({ error: 'Method not allowed' }),
+      body: JSON.stringify({ error: "Method not allowed" }),
     };
   }
 
-  const { public_id } = JSON.parse(event.body || '{}');
+  const { public_id } = JSON.parse(event.body || "{}");
 
   if (!public_id) {
     return {
       statusCode: 400,
       headers,
-      body: JSON.stringify({ error: 'Missing public_id' }),
+      body: JSON.stringify({ error: "Missing public_id" }),
     };
   }
 
@@ -47,7 +48,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Missing Cloudinary credentials' }),
+      body: JSON.stringify({ error: "Missing Cloudinary credentials" }),
     };
   }
 
@@ -61,24 +62,24 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
     const cloudinaryRes = await fetch(
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/destroy`,
       {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           public_id,
           signature,
           timestamp,
           api_key: API_KEY,
         }),
-      }
+      },
     );
 
     const result = await cloudinaryRes.json();
 
-    if (result.result === 'ok') {
+    if (result.result === "ok") {
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ success: true, message: 'Image deleted' }),
+        body: JSON.stringify({ success: true, message: "Image deleted" }),
       };
     } else {
       return {
