@@ -56,6 +56,10 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [lastCleanResult, setLastCleanResult] = useState<CleanResult | null>(
     null,
   );
+  const [lastSyncResult, setLastSyncResult] = useState<{
+    added: number;
+    removed: number;
+  } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const isResizingRef = useRef(false);
@@ -197,6 +201,70 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       setSortOrder("asc");
     }
     setPage(1);
+  };
+
+  // 🔄 同步云端图片：清理无效记录 + 同步到本地
+  const handleSyncCloud = async () => {
+    if (
+      !confirm(
+        "确定同步云端图片吗？\n\n这会：\n1. 检查所有云端图片是否可访问\n2. 删除 Cloudinary 中已不存在但 Supabase 中仍有的记录\n3. 将云端图片同步到本地图库",
+      )
+    )
+      return;
+
+    setIsSyncing(true);
+    setLastSyncResult(null);
+
+    try {
+      // 1. 先清理无效云端记录
+      const cleanResult = await cleanInvalidCloudImages();
+      setLastCleanResult(cleanResult);
+
+      // 2. 获取清理后的云端图片
+      const cloudImages = await getCloudinaryImages();
+
+      // 3. 同步到本地
+      let addedCount = 0;
+      let skippedCount = 0;
+
+      for (const img of cloudImages) {
+        const exists = images.some(
+          (localImg) => localImg.src === img.url || localImg.name === img.name,
+        );
+        if (!exists) {
+          addImage({
+            src: img.url,
+            name: img.name,
+            category: "云端",
+            width: 300,
+            height: 300,
+          });
+          addedCount++;
+        } else {
+          skippedCount++;
+        }
+      }
+
+      // 4. 更新云端数量显示
+      await fetchCloudCount();
+
+      setLastSyncResult({
+        added: addedCount,
+        removed: cleanResult.deleted,
+      });
+
+      const messages = ["同步完成！"];
+      messages.push(`清理无效: ${cleanResult.deleted} 条`);
+      messages.push(`新增本地: ${addedCount} 张`);
+      messages.push(`跳过重复: ${skippedCount} 张`);
+      messages.push(`云端总计: ${cloudImages.length} 张`);
+      alert(messages.join("\n"));
+    } catch (error) {
+      console.error("同步云端图片失败:", error);
+      alert("同步失败: " + (error as Error).message);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleSyncFromCloud = async () => {
@@ -384,7 +452,42 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             </div>
 
-            {/* 从云端同步按钮 */}
+            {/* 🔄 同步云端按钮 */}
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+              <button
+                onClick={handleSyncCloud}
+                disabled={isSyncing}
+                className="w-full px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 flex items-center justify-center gap-1"
+              >
+                {isSyncing ? (
+                  <>
+                    <span className="animate-spin">↻</span>
+                    <span>同步中...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🔄</span>
+                    <span>同步云端</span>
+                  </>
+                )}
+              </button>
+              <p
+                className="text-gray-400 mt-1 text-center"
+                style={{ fontSize: "9px" }}
+              >
+                清理无效记录并同步到本地
+              </p>
+            </div>
+
+            {/* 同步结果提示 */}
+            {lastSyncResult && (
+              <div className="flex-shrink-0 px-3 py-1 bg-green-50 border-b border-green-100 text-green-700">
+                上次同步: 清理 {lastSyncResult.removed} 条, 新增{" "}
+                {lastSyncResult.added} 张
+              </div>
+            )}
+
+            {/* 从云端同步按钮（旧功能保留） */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <button
                 onClick={handleSyncFromCloud}
@@ -398,8 +501,8 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   </>
                 ) : (
                   <>
-                    <span>🔄</span>
-                    <span>从云端同步</span>
+                    <span>⬇️</span>
+                    <span>从云端导入</span>
                   </>
                 )}
               </button>
@@ -616,7 +719,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 <div className="text-center py-8 text-gray-400">
                   {searchTerm
                     ? "无结果"
-                    : "暂无图片，点击 📁 添加或 🔄 从云端同步"}
+                    : "暂无图片，点击 📁 添加或 🔄 同步云端"}
                 </div>
               ) : (
                 <>
