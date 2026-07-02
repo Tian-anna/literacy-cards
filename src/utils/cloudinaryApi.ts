@@ -18,8 +18,6 @@ export function isCloudinarySample(publicId: string): boolean {
     lower.startsWith("sample/") ||
     lower.startsWith("samples/") ||
     lower.startsWith("cld-sample") ||
-    lower.includes("/sample") ||
-    lower.includes("/samples")
   );
 }
 
@@ -91,7 +89,8 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   // 检查是否已存在
   const existing = await checkImageExists(fileName);
   if (existing) {
-    console.log("Image already exists:", fileName);
+    const isAccessible = await checkImageAccessible(existing.url);
+  if (isAccessible) {
     return existing.url;
   }
 
