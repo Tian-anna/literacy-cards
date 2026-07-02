@@ -51,8 +51,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0 });
 
+  const isTouchPanningRef = useRef(false);
+  const touchPanStartRef = useRef({ x: 0, y: 0 });
+  const lastPanOffsetRef = useRef({ x: 0, y: 0 });
+
   const pinchStartRef = useRef({ distance: 0, scale: 1 });
   const isPinchingRef = useRef(false);
+  const rafScaleRef = useRef<number | null>(null);
 
   const getCanvasPoint = useCallback(
     (clientX: number, clientY: number) => {
@@ -216,9 +221,11 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     let hasMoved = false;
     let initialDistance = 0;
     let initialScale = 1;
+    let panStartDistance = 0;
+    let panStartCenter = { x: 0, y: 0 };
 
     const onTouchStart = (e: TouchEvent) => {
-      // 双指缩放开始
+      // 双指：缩放或平移
       if (e.touches.length === 2) {
         e.preventDefault();
         const touch1 = e.touches[0];
@@ -227,8 +234,16 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           touch2.clientX - touch1.clientX,
           touch2.clientY - touch1.clientY,
         );
+        panStartDistance = initialDistance;
         initialScale = canvasScale;
+        panStartCenter = {
+          x: (touch1.clientX + touch2.clientX) / 2,
+          y: (touch1.clientY + touch2.clientY) / 2,
+        };
+        lastPanOffsetRef.current = { ...canvasOffset };
         isPinchingRef.current = true;
+        isTouchPanningRef.current = false;
+        isTouchBoxSelectingRef.current = false;
         return;
       }
 
@@ -243,6 +258,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       touchStartTime = Date.now();
       hasMoved = false;
       isTouchBoxSelectingRef.current = false;
+      isTouchPanningRef.current = false;
 
       const store = useStore.getState();
       if (store.selectedIds.size <= 1) {
@@ -251,7 +267,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      // 双指缩放
+      // 双指：缩放 + 平移
       if (e.touches.length === 2 && isPinchingRef.current) {
         e.preventDefault();
         const touch1 = e.touches[0];
@@ -261,10 +277,28 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           touch2.clientY - touch1.clientY,
         );
 
+        const currentCenter = {
+          x: (touch1.clientX + touch2.clientX) / 2,
+          y: (touch1.clientY + touch2.clientY) / 2,
+        };
+
+        // 缩放
         if (initialDistance > 0) {
           const newScale = (distance / initialDistance) * initialScale;
-          setCanvasScale(Math.max(0.3, Math.min(3, newScale)));
+          const clampedScale = Math.max(0.3, Math.min(3, newScale));
+          if (rafScaleRef.current) cancelAnimationFrame(rafScaleRef.current);
+          rafScaleRef.current = requestAnimationFrame(() => {
+            setCanvasScale(clampedScale);
+          });
         }
+
+        // 双指平移（画布跟随手指中心移动）
+        const dx = currentCenter.x - panStartCenter.x;
+        const dy = currentCenter.y - panStartCenter.y;
+        setCanvasOffset({
+          x: lastPanOffsetRef.current.x + dx,
+          y: lastPanOffsetRef.current.y + dy,
+        });
         return;
       }
 
@@ -273,6 +307,8 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
       const target = e.target as HTMLElement;
       if (!canvas.contains(target)) return;
+      // 如果触摸的是卡片，让 DraggableCard 处理
+      if (target.closest(".placed-card")) return;
 
       const touch = e.touches[0];
       const point = getCanvasPoint(touch.clientX, touch.clientY);
@@ -353,8 +389,15 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       canvas.removeEventListener("touchend", onTouchEnd);
       canvas.removeEventListener("touchcancel", onTouchEnd);
       document.removeEventListener("touchstart", preventDoubleTap);
+      if (rafScaleRef.current) cancelAnimationFrame(rafScaleRef.current);
     };
-  }, [getCanvasPoint, getCardsInBox, clearSelection, canvasScale]);
+  }, [
+    getCanvasPoint,
+    getCardsInBox,
+    clearSelection,
+    canvasScale,
+    canvasOffset,
+  ]);
 
   // 键盘快捷键
   useEffect(() => {
@@ -601,6 +644,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               key={card.instanceId}
               card={card}
               canvasScale={canvasScale}
+              canvasOffset={canvasOffset}
             />
           ))}
 

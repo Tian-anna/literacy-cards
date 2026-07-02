@@ -5,11 +5,13 @@ import { PlacedCard } from "@/types";
 interface DraggableCardProps {
   card: PlacedCard;
   canvasScale?: number;
+  canvasOffset?: { x: number; y: number };
 }
 
 const DraggableCard: React.FC<DraggableCardProps> = ({
   card,
   canvasScale = 1,
+  canvasOffset = { x: 0, y: 0 },
 }) => {
   const {
     images,
@@ -35,6 +37,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
   const isTouchDraggingRef = useRef(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressRef = useRef(false);
+  const lastTouchRef = useRef({ x: 0, y: 0 });
 
   const image = images.find((img) => img.id === card.imageId);
   if (!image) {
@@ -152,7 +155,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       if (e.touches.length !== 1) return;
 
       // Safari: 阻止默认行为防止页面滚动
-      // e.preventDefault(); // 注意：这可能会阻止滚动，根据需要开启
+      e.preventDefault();
 
       const touch = e.touches[0];
       touchStartX = touch.clientX;
@@ -161,6 +164,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       hasMoved = false;
       isTouchDraggingRef.current = false;
       isLongPressRef.current = false;
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
 
       // 长按检测（500ms）
       longPressTimerRef.current = setTimeout(() => {
@@ -191,7 +195,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       if (e.touches.length !== 1) return;
 
       // Safari: 阻止默认行为
-      // e.preventDefault();
+      e.preventDefault();
 
       const touch = e.touches[0];
       const dx = (touch.clientX - dragStartRef.current.x) / canvasScale;
@@ -228,6 +232,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       }
 
       if (isTouchDraggingRef.current) {
+        // 基于初始位置 + 总位移
         initialPositionsRef.current.forEach((pos, id) => {
           let newX = pos.x + dx;
           let newY = pos.y + dy;
@@ -240,6 +245,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           updateCard(id, { x: newX, y: newY });
         });
       }
+
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
     };
 
     const onTouchEnd = (e: TouchEvent) => {
@@ -274,7 +281,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     };
 
     // Safari 需要 { passive: false }
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: false });
     el.addEventListener("touchcancel", onTouchEnd, { passive: false });
@@ -343,7 +350,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           WebkitUserSelect: "none",
           userSelect: "none",
           WebkitTapHighlightColor: "transparent",
-          // 删除 WebkitUserDrag，改用下面的方式
         } as React.CSSProperties
       }
       onMouseDown={handleMouseDown}
