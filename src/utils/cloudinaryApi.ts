@@ -119,20 +119,35 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   const data = await res.json();
   console.log("Upload success:", data.secure_url);
 
-  // 保存到 Supabase
-  const { error } = await supabase.from("cloud_images").insert({
-    name: fileName,
-    url: data.secure_url,
-    public_id: data.public_id,
-    category: "cloud",
-  });
+  // 保存到 Supabase（更新或插入）
+  if (existing) {
+    // 更新已有记录
+    const { error } = await supabase
+      .from("cloud_images")
+      .update({
+        url: data.secure_url,
+        public_id: data.public_id,
+      })
+      .eq("name", fileName);
 
-  if (error) {
-    console.error("Supabase insert error:", error);
+    if (error) {
+      console.error("Supabase update error:", error);
+    }
   } else {
-    console.log("Saved to Supabase");
+    // 插入新记录
+    const { error } = await supabase.from("cloud_images").insert({
+      name: fileName,
+      url: data.secure_url,
+      public_id: data.public_id,
+      category: "cloud",
+    });
+
+    if (error) {
+      console.error("Supabase insert error:", error);
+    }
   }
 
+  console.log("Saved to Supabase");
   return data.secure_url;
 }
 
@@ -176,9 +191,12 @@ export async function getCloudinaryImageCount(): Promise<number> {
   return filtered.length;
 }
 
-// ========== 删除 ==========
+// ========== 删除（关键修改：同步删除 Cloudinary 和 Supabase） ==========
 
-// 删除单张云端图片
+/**
+ * 删除单张云端图片
+ * 先调用 Netlify Function 删除 Cloudinary 图片，再删除 Supabase 记录
+ */
 export async function deleteCloudImage(public_id: string): Promise<boolean> {
   // 阻止删除 Cloudinary 示例图片
   if (isCloudinarySample(public_id)) {
@@ -188,17 +206,40 @@ export async function deleteCloudImage(public_id: string): Promise<boolean> {
 
   console.log("Deleting cloud image:", public_id);
 
+  // 1. 先调用 Netlify Function 删除 Cloudinary 图片
+  try {
+    const backendRes = await fetch("/.netlify/functions/delete-cloudinary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ public_id }),
+    });
+
+    if (!backendRes.ok) {
+      const errorData = await backendRes.json().catch(() => ({}));
+      console.error("删除 Cloudinary 图片失败:", errorData);
+      // 如果后端删除失败，继续尝试删除 Supabase 记录（至少保持数据库一致）
+      // 或者你可以选择抛出错误，阻止删除
+      // throw new Error(errorData.error || "删除 Cloudinary 图片失败");
+    } else {
+      console.log("Cloudinary 图片删除成功");
+    }
+  } catch (e) {
+    console.error("调用后端删除 API 失败:", e);
+    // 网络错误时，继续删除 Supabase 记录
+  }
+
+  // 2. 删除 Supabase 记录
   const { error } = await supabase
     .from("cloud_images")
     .delete()
     .eq("public_id", public_id);
 
   if (error) {
-    console.error("Delete error:", error);
+    console.error("Delete Supabase error:", error);
     throw new Error(error.message);
   }
 
-  console.log("Delete success");
+  console.log("Delete success - Supabase record removed");
   return true;
 }
 
@@ -224,22 +265,19 @@ export async function clearAllCloudImages(): Promise<number> {
     return 0;
   }
 
-  // 批量删除自己的图片
-  const publicIds = myImages.map((img) => img.public_id);
-  const { error } = await supabase
-    .from("cloud_images")
-    .delete()
-    .in("public_id", publicIds);
-
-  if (error) {
-    console.error("Clear error:", error);
-    throw new Error(error.message);
+  // 逐个删除（调用 Netlify Function 同步删除 Cloudinary）
+  let deletedCount = 0;
+  for (const img of myImages) {
+    try {
+      await deleteCloudImage(img.public_id);
+      deletedCount++;
+    } catch (e) {
+      console.error("删除失败:", img.public_id, e);
+    }
   }
 
-  console.log(
-    `已删除 ${myImages.length} 张图片，跳过了 ${sampleCount} 张示例图`,
-  );
-  return myImages.length;
+  console.log(`已删除 ${deletedCount} 张图片，跳过了 ${sampleCount} 张示例图`);
+  return deletedCount;
 }
 
 // ========== 清理无效图片 ==========
@@ -330,8 +368,22 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     }
   }
 
-  // 4. 删除无效记录
+  // 4. 删除无效记录（同时也尝试删除 Cloudinary 图片）
   for (const id of invalidIds) {
+    const img = userImages.find((i) => i.id === id);
+    if (img) {
+      try {
+        // 尝试删除 Cloudinary 图片
+        await fetch("/.netlify/functions/delete-cloudinary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ public_id: img.public_id }),
+        });
+      } catch (e) {
+        console.log("删除 Cloudinary 图片失败（可能已不存在）:", img.public_id);
+      }
+    }
+
     try {
       const { error: delError } = await supabase
         .from("cloud_images")
