@@ -24,6 +24,8 @@ interface ImageLibraryProps {
 const ITEMS_PER_PAGE = 30;
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 500;
+const LAZY_LOAD_BATCH = 30; // 每批加载数量
+const LAZY_LOAD_INTERVAL = 50; // 每批间隔(ms)
 
 const ImageLibrary: React.FC<ImageLibraryProps> = ({
   onAddToCanvas,
@@ -62,6 +64,13 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // 🆕 显示模式：分页 / 全部
+  const [displayMode, setDisplayMode] = useState<"page" | "all">("page");
+  // 🆕 全部模式下已加载数量
+  const [loadedCount, setLoadedCount] = useState(0);
+  // 🆕 全部模式是否正在加载
+  const [isLoadingAll, setIsLoadingAll] = useState(false);
+
   const isResizingRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(width);
@@ -82,6 +91,56 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   useEffect(() => {
     fetchCloudCount();
   }, [fetchCloudCount]);
+
+  // 🆕 全部显示模式：懒加载分批加载图片
+  useEffect(() => {
+    if (displayMode !== "all") {
+      setLoadedCount(0);
+      setIsLoadingAll(false);
+      return;
+    }
+
+    setIsLoadingAll(true);
+    setLoadedCount(0);
+
+    const loadBatch = (current: number) => {
+      if (current >= filteredImages.length) {
+        setIsLoadingAll(false);
+        setLoadedCount(filteredImages.length);
+        return;
+      }
+      const next = Math.min(current + LAZY_LOAD_BATCH, filteredImages.length);
+      setLoadedCount(next);
+      setTimeout(() => loadBatch(next), LAZY_LOAD_INTERVAL);
+    };
+
+    loadBatch(0);
+
+    return () => {
+      // 清理：切换模式时中断加载
+      setIsLoadingAll(false);
+    };
+  }, [displayMode, filteredImages.length]);
+
+  // 🆕 全部模式下滚动加载更多
+  useEffect(() => {
+    if (displayMode !== "all") return;
+
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, clientHeight, scrollHeight } = container;
+      if (scrollTop + clientHeight >= scrollHeight - 100) {
+        setLoadedCount((prev) =>
+          Math.min(prev + LAZY_LOAD_BATCH, filteredImages.length),
+        );
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [displayMode, filteredImages.length]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -186,12 +245,21 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     return result;
   }, [images, selectedCategory, searchTerm, sortBy, sortOrder]);
 
+  // 🆕 根据显示模式决定显示的图片列表
   const totalCount = filteredImages.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
-  const paginatedImages = filteredImages.slice(
-    (page - 1) * ITEMS_PER_PAGE,
-    page * ITEMS_PER_PAGE,
-  );
+
+  const displayImages = useMemo(() => {
+    if (displayMode === "page") {
+      return filteredImages.slice(
+        (page - 1) * ITEMS_PER_PAGE,
+        page * ITEMS_PER_PAGE,
+      );
+    } else {
+      // 全部模式：显示已加载的部分
+      return filteredImages.slice(0, loadedCount);
+    }
+  }, [filteredImages, displayMode, page, loadedCount]);
 
   const handleSort = (type: "name" | "date") => {
     if (sortBy === type) {
@@ -201,6 +269,17 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       setSortOrder("asc");
     }
     setPage(1);
+  };
+
+  // 🆕 切换显示模式
+  const handleDisplayModeChange = (mode: "page" | "all") => {
+    setDisplayMode(mode);
+    setPage(1);
+    setLoadedCount(0);
+    // 滚动到顶部
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
   };
 
   // 🔄 同步云端图片：清理无效记录 + 同步到本地
@@ -598,7 +677,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setSelectedImages(new Set());
                 }}
                 className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500"
-                style={{ maxWidth: "100%" }}
+                style={{ maxWidth: "100%", borderRadius: "8px" }}
               />
             </div>
 
@@ -628,6 +707,58 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 日期
                 {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
               </button>
+            </div>
+
+            {/* 🆕 显示模式切换 */}
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">显示方式:</span>
+                <div className="flex-1 flex gap-1">
+                  <button
+                    onClick={() => handleDisplayModeChange("page")}
+                    className={`flex-1 px-2 py-0.5 rounded text-center ${
+                      displayMode === "page"
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                    style={{ borderRadius: "8px" }}
+                  >
+                    分页
+                  </button>
+                  <button
+                    onClick={() => handleDisplayModeChange("all")}
+                    className={`flex-1 px-2 py-0.5 rounded text-center ${
+                      displayMode === "all"
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                    style={{ borderRadius: "8px" }}
+                  >
+                    全部
+                  </button>
+                </div>
+              </div>
+              {/* 🆕 全部模式加载进度 */}
+              {displayMode === "all" && totalCount > 0 && (
+                <div className="mt-1.5">
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>
+                      {isLoadingAll
+                        ? `加载中... ${loadedCount}/${totalCount}`
+                        : `已加载 ${loadedCount}/${totalCount}`}
+                    </span>
+                    <span>{Math.round((loadedCount / totalCount) * 100)}%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-300"
+                      style={{
+                        width: `${(loadedCount / totalCount) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 批量操作 + 清理无效 */}
@@ -746,7 +877,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                         "repeat(auto-fit, minmax(45px, 1fr))",
                     }}
                   >
-                    {paginatedImages.map((image) => (
+                    {displayImages.map((image) => (
                       <div
                         key={image.id}
                         className={`relative aspect-square rounded-md overflow-hidden border-2 cursor-pointer transition-all hover:shadow-md ${
@@ -818,7 +949,19 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     ))}
                   </div>
 
-                  {totalPages > 1 && (
+                  {/* 🆕 全部模式：底部加载更多提示 */}
+                  {displayMode === "all" &&
+                    loadedCount < totalCount &&
+                    !isLoadingAll && (
+                      <div className="flex items-center justify-center py-3 text-gray-400 text-xs">
+                        <span className="animate-pulse">
+                          向下滚动加载更多... ({loadedCount}/{totalCount})
+                        </span>
+                      </div>
+                    )}
+
+                  {/* 分页控件（仅分页模式显示） */}
+                  {displayMode === "page" && totalPages > 1 && (
                     <div className="flex items-center justify-center gap-2 mt-2 py-1.5">
                       <button
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
