@@ -26,6 +26,7 @@ const SceneManager: React.FC = () => {
   const [importData, setImportData] = useState("");
   const [showScenes, setShowScenes] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,6 +60,10 @@ const SceneManager: React.FC = () => {
     [addImage],
   );
 
+  const handleAddClick = () => {
+    fileInputRef.current?.click();
+  };
+
   const handleSaveScene = () => {
     if (!currentSceneId) return;
     updateScene(currentSceneId, { cards: placedCards });
@@ -89,26 +94,26 @@ const SceneManager: React.FC = () => {
       className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md flex-wrap"
       style={{ fontSize: "12px" }}
     >
-      {/* 添加图片按钮 */}
-      <label
-        className={`bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 inline-flex items-center gap-1 transition-colors shadow-sm font-medium cursor-pointer relative overflow-hidden border border-green-200 ${
-          isUploading ? "opacity-70" : ""
+      {/* 添加图片按钮 —— 改为 button 格式，与其他按钮一致 */}
+      <button
+        onClick={handleAddClick}
+        disabled={isUploading}
+        className={`bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200 ${
+          isUploading ? "cursor-not-allowed" : "cursor-pointer"
         }`}
       >
-        <span className="pointer-events-none">{isUploading ? "⏳" : "📁"}</span>
-        <span className="pointer-events-none">
-          {isUploading ? "上传中..." : "添加"}
-        </span>
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleFileUpload}
-          disabled={isUploading}
-          className="absolute inset-0 opacity-0 cursor-pointer"
-          style={{ width: "100%", height: "100%" }}
-        />
-      </label>
+        <span>{isUploading ? "⏳" : "📁"}</span>
+        <span>{isUploading ? "上传中..." : "添加"}</span>
+      </button>
+      {/* 隐藏的文件输入 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleFileUpload}
+        className="hidden"
+      />
 
       {/* 清空按钮 */}
       <button
