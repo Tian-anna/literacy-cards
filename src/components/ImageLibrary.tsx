@@ -24,8 +24,8 @@ interface ImageLibraryProps {
 const ITEMS_PER_PAGE = 30;
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 500;
-const LAZY_LOAD_BATCH = 30; // 每批加载数量
-const LAZY_LOAD_INTERVAL = 50; // 每批间隔(ms)
+const LAZY_LOAD_BATCH = 30;
+const LAZY_LOAD_INTERVAL = 50;
 
 const ImageLibrary: React.FC<ImageLibraryProps> = ({
   onAddToCanvas,
@@ -91,56 +91,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   useEffect(() => {
     fetchCloudCount();
   }, [fetchCloudCount]);
-
-  // 🆕 全部显示模式：懒加载分批加载图片
-  useEffect(() => {
-    if (displayMode !== "all") {
-      setLoadedCount(0);
-      setIsLoadingAll(false);
-      return;
-    }
-
-    setIsLoadingAll(true);
-    setLoadedCount(0);
-
-    const loadBatch = (current: number) => {
-      if (current >= filteredImages.length) {
-        setIsLoadingAll(false);
-        setLoadedCount(filteredImages.length);
-        return;
-      }
-      const next = Math.min(current + LAZY_LOAD_BATCH, filteredImages.length);
-      setLoadedCount(next);
-      setTimeout(() => loadBatch(next), LAZY_LOAD_INTERVAL);
-    };
-
-    loadBatch(0);
-
-    return () => {
-      // 清理：切换模式时中断加载
-      setIsLoadingAll(false);
-    };
-  }, [displayMode, filteredImages.length]);
-
-  // 🆕 全部模式下滚动加载更多
-  useEffect(() => {
-    if (displayMode !== "all") return;
-
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      const { scrollTop, clientHeight, scrollHeight } = container;
-      if (scrollTop + clientHeight >= scrollHeight - 100) {
-        setLoadedCount((prev) =>
-          Math.min(prev + LAZY_LOAD_BATCH, filteredImages.length),
-        );
-      }
-    };
-
-    container.addEventListener("scroll", handleScroll);
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, [displayMode, filteredImages.length]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -214,6 +164,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     return counts;
   }, [images, categories]);
 
+  // ✅ filteredImages useMemo 必须在使用它的 useEffect 之前定义
   const filteredImages = useMemo(() => {
     let result = [...images];
 
@@ -245,6 +196,55 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     return result;
   }, [images, selectedCategory, searchTerm, sortBy, sortOrder]);
 
+  // ✅ 懒加载 useEffect 放在 filteredImages 定义之后
+  useEffect(() => {
+    if (displayMode !== "all") {
+      setLoadedCount(0);
+      setIsLoadingAll(false);
+      return;
+    }
+
+    setIsLoadingAll(true);
+    setLoadedCount(0);
+
+    const loadBatch = (current: number) => {
+      if (current >= filteredImages.length) {
+        setIsLoadingAll(false);
+        setLoadedCount(filteredImages.length);
+        return;
+      }
+      const next = Math.min(current + LAZY_LOAD_BATCH, filteredImages.length);
+      setLoadedCount(next);
+      setTimeout(() => loadBatch(next), LAZY_LOAD_INTERVAL);
+    };
+
+    loadBatch(0);
+
+    return () => {
+      setIsLoadingAll(false);
+    };
+  }, [displayMode, filteredImages.length]);
+
+  // ✅ 滚动加载 useEffect 也放在 filteredImages 定义之后
+  useEffect(() => {
+    if (displayMode !== "all") return;
+
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, clientHeight, scrollHeight } = container;
+      if (scrollTop + clientHeight >= scrollHeight - 100) {
+        setLoadedCount((prev) =>
+          Math.min(prev + LAZY_LOAD_BATCH, filteredImages.length),
+        );
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [displayMode, filteredImages.length]);
+
   // 🆕 根据显示模式决定显示的图片列表
   const totalCount = filteredImages.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
@@ -256,7 +256,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         page * ITEMS_PER_PAGE,
       );
     } else {
-      // 全部模式：显示已加载的部分
       return filteredImages.slice(0, loadedCount);
     }
   }, [filteredImages, displayMode, page, loadedCount]);
@@ -276,7 +275,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setDisplayMode(mode);
     setPage(1);
     setLoadedCount(0);
-    // 滚动到顶部
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
     }
@@ -295,14 +293,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setLastSyncResult(null);
 
     try {
-      // 1. 先清理无效云端记录
       const cleanResult = await cleanInvalidCloudImages();
       setLastCleanResult(cleanResult);
 
-      // 2. 获取清理后的云端图片
       const cloudImages = await getCloudinaryImages();
 
-      // 3. 同步到本地
       let addedCount = 0;
       let skippedCount = 0;
 
@@ -324,7 +319,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         }
       }
 
-      // 4. 更新云端数量显示
       await fetchCloudCount();
 
       setLastSyncResult({
@@ -677,7 +671,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setSelectedImages(new Set());
                 }}
                 className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500"
-                style={{ maxWidth: "100%", borderRadius: "8px" }}
+                style={{ maxWidth: "100%" }}
               />
             </div>
 
