@@ -87,7 +87,7 @@ const SceneManager: React.FC = () => {
   return (
     <div
       className="bg-green-500 text-white px-3 py-2 flex items-center gap-2 shadow-md flex-wrap"
-      style={{ fontSize: "10px" }}
+      style={{ fontSize: "12px" }}
     >
       {/* 添加图片按钮 */}
       <label
@@ -144,7 +144,7 @@ const SceneManager: React.FC = () => {
         {showScenes && (
           <div
             className="absolute top-full left-0 mt-1 bg-white text-gray-800 rounded-lg shadow-xl p-3 w-56 z-50"
-            style={{ fontSize: "10px" }}
+            style={{ fontSize: "12px" }}
           >
             <div className="flex gap-2 mb-2">
               <input
@@ -235,9 +235,9 @@ const SceneManager: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div
             className="bg-white rounded-xl p-6 w-96 max-w-[90%] text-gray-800"
-            style={{ fontSize: "10px" }}
+            style={{ fontSize: "12px" }}
           >
-            <h3 className="font-bold mb-4" style={{ fontSize: "10px" }}>
+            <h3 className="font-bold mb-4" style={{ fontSize: "12px" }}>
               导入场景
             </h3>
             <textarea

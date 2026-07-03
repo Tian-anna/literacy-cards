@@ -409,7 +409,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   };
 
   return (
-    <div className="h-full flex" style={{ fontSize: "10px" }}>
+    <div className="h-full flex" style={{ fontSize: "12px" }}>
       <div
         className="h-full flex flex-col bg-white border-r border-gray-200 overflow-hidden"
         style={{ width, minWidth: width, maxWidth: width, flexShrink: 0 }}
@@ -473,7 +473,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </button>
               <p
                 className="text-gray-400 mt-1 text-center"
-                style={{ fontSize: "9px" }}
+                style={{ fontSize: "10px" }}
               >
                 清理无效记录并同步到本地
               </p>

@@ -641,7 +641,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       {/* 顶部工具栏 */}
       <div
         className="flex-shrink-0 flex items-center gap-1 px-2 py-2 bg-green-500 text-white z-10 overflow-x-auto"
-        style={{ fontSize: "10px" }}
+        style={{ fontSize: "12px" }}
       >
         {/* 画布颜色 */}
         <div className="relative">
@@ -656,7 +656,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
               title="画布颜色"
             />
-            <span style={{ fontSize: "8px", pointerEvents: "none" }}>🎨</span>
+            <span style={{ fontSize: "12px", pointerEvents: "none" }}>🎨</span>
           </label>
         </div>
 
@@ -681,14 +681,14 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasScale(newScale);
             }}
             className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
-            style={{ fontSize: "10px" }}
+            style={{ fontSize: "12px" }}
             title="缩小"
           >
             −
           </button>
           <span
             className="font-medium w-10 text-center whitespace-nowrap"
-            style={{ fontSize: "10px" }}
+            style={{ fontSize: "12px" }}
           >
             {Math.round(canvasScale * 100)}%
           </span>
@@ -709,7 +709,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasScale(newScale);
             }}
             className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
-            style={{ fontSize: "10px" }}
+            style={{ fontSize: "12px" }}
             title="放大"
           >
             +
@@ -720,7 +720,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasOffset({ x: 0, y: 0 });
             }}
             className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm transition-colors"
-            style={{ fontSize: "10px" }}
+            style={{ fontSize: "12px" }}
             title="重置"
           >
             ⌂
@@ -766,7 +766,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           <div className="flex items-center gap-1 flex-shrink-0">
             <span
               className="font-medium bg-white/20 px-2 py-0.5 rounded whitespace-nowrap"
-              style={{ fontSize: "9px" }}
+              style={{ fontSize: "12px" }}
             >
               已选 {selectedIds.size} 张
             </span>
@@ -777,7 +777,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
                 clearSelection();
               }}
               className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm hover:bg-red-600"
-              style={{ fontSize: "10px" }}
+              style={{ fontSize: "12px" }}
               title="删除全部选中"
             >
               ×

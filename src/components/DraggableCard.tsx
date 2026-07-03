@@ -409,7 +409,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       {isSelected && selectedIds.size > 1 && (
         <div
           className="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white z-10"
-          style={{ fontSize: "9px" }}
+          style={{ fontSize: "12px" }}
         >
           {selectedIds.size}
         </div>
@@ -433,7 +433,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       ) : (
         <div
           className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100 rounded-lg"
-          style={{ fontSize: "10px" }}
+          style={{ fontSize: "12px" }}
         >
           {image.name || "?"}
         </div>
@@ -448,7 +448,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         >
           <button
             className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-md border border-white"
-            style={{ fontSize: "10px" }}
+            style={{ fontSize: "12px" }}
             onClick={(e) => {
               e.stopPropagation();
               updateCard(card.instanceId, {
@@ -461,7 +461,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           </button>
           <button
             className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md border border-white"
-            style={{ fontSize: "10px" }}
+            style={{ fontSize: "12px" }}
             onClick={(e) => {
               e.stopPropagation();
               const { removeCard } = useStore.getState();
@@ -478,7 +478,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       {showControls && !isSelected && (
         <div
           className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-gray-500 whitespace-nowrap"
-          style={{ fontSize: "8px" }}
+          style={{ fontSize: "12px" }}
         >
           长按菜单
         </div>
