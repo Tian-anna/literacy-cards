@@ -458,6 +458,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 onClick={handleSyncCloud}
                 disabled={isSyncing}
                 className="w-full px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 flex items-center justify-center gap-1"
+                style={{ borderRadius: "8px" }}
               >
                 {isSyncing ? (
                   <>
@@ -473,7 +474,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </button>
               <p
                 className="text-gray-400 mt-1 text-center"
-                style={{ fontSize: "10px" }}
+                style={{ fontSize: "9px" }}
               >
                 清理无效记录并同步到本地
               </p>
@@ -492,7 +493,8 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               <button
                 onClick={handleSyncFromCloud}
                 disabled={isSyncing}
-                className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
+                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
+                style={{ borderRadius: "8px" }}
               >
                 {isSyncing ? (
                   <>
@@ -515,6 +517,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 <button
                   onClick={() => setIsManagingCategories(!isManagingCategories)}
                   className="text-blue-500 hover:text-blue-600"
+                  style={{ borderRadius: "8px" }}
                 >
                   {isManagingCategories ? "完成" : "管理"}
                 </button>
@@ -527,6 +530,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   setPage(1);
                 }}
                 className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500 bg-white"
+                style={{ borderRadius: "8px" }}
               >
                 {["全部", ...categories].map((cat) => (
                   <option key={cat} value={cat}>
@@ -551,6 +555,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     <button
                       onClick={handleAddCategory}
                       className="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                      style={{ borderRadius: "8px" }}
                     >
                       添加
                     </button>
@@ -562,11 +567,13 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                         <span
                           key={cat}
                           className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded"
+                          style={{ borderRadius: "8px" }}
                         >
                           {cat}
                           <button
                             onClick={() => removeCategory(cat)}
                             className="text-red-400 hover:text-red-600"
+                            style={{ borderRadius: "8px" }}
                           >
                             ×
                           </button>
@@ -602,6 +609,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     ? "bg-green-500 text-white"
                     : "bg-gray-100 text-gray-600"
                 }`}
+                style={{ borderRadius: "8px" }}
               >
                 名称
                 {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
@@ -613,6 +621,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     ? "bg-green-500 text-white"
                     : "bg-gray-100 text-gray-600"
                 }`}
+                style={{ borderRadius: "8px" }}
               >
                 日期
                 {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
@@ -631,6 +640,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     ? "bg-orange-500 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
+                style={{ borderRadius: "8px" }}
               >
                 {isBatchMode ? "退出多选" : "批量操作"}
               </button>
@@ -639,6 +649,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 disabled={isCleaning}
                 className="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-50"
                 title="检查所有云端图片URL是否可访问，删除无效记录"
+                style={{ borderRadius: "8px" }}
               >
                 {isCleaning ? "清理中..." : "清理无效"}
               </button>
@@ -665,12 +676,14 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     <button
                       onClick={handleSelectAll}
                       className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
+                      style={{ borderRadius: "8px" }}
                     >
                       全选
                     </button>
                     <button
                       onClick={handleDeselectAll}
                       className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                      style={{ borderRadius: "8px" }}
                     >
                       取消
                     </button>
@@ -678,6 +691,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       onClick={handleBatchDelete}
                       disabled={selectedImages.size === 0}
                       className="px-2 py-0.5 bg-red-500 text-white rounded disabled:opacity-50 hover:bg-red-600"
+                      style={{ borderRadius: "8px" }}
                     >
                       删除
                     </button>
@@ -808,6 +822,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={page <= 1}
                         className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ borderRadius: "8px" }}
                       >
                         ← 上一页
                       </button>
@@ -820,6 +835,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                         }
                         disabled={page >= totalPages}
                         className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ borderRadius: "8px" }}
                       >
                         下一页 →
                       </button>
