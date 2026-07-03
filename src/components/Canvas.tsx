@@ -55,12 +55,14 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   const isPinchingRef = useRef(false);
   const rafScaleRef = useRef<number | null>(null);
 
-  // 双指缩放/平移的状态
+  // 双指缩放/平移的状态 —— 新增 lastCenter 用于追踪平移增量
   const pinchStateRef = useRef({
     initialDistance: 0,
     initialScale: 1,
     startCenter: { x: 0, y: 0 },
     startOffset: { x: 0, y: 0 },
+    lastCenter: { x: 0, y: 0 }, // 上一帧的双指中心，用于计算平移增量
+    worldCenter: { x: 0, y: 0 }, // 双指中心对应的世界坐标（画布坐标）
   });
 
   // 监听画布尺寸变化
@@ -125,10 +127,8 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   // 限制画布偏移，确保内容不会完全不可见
   const clampCanvasOffset = useCallback(
     (offset: { x: number; y: number }, scale: number) => {
-      // 如果没有任何卡片，不做限制
       if (placedCards.length === 0) return offset;
 
-      // 计算所有卡片的包围盒
       let minCardX = Infinity;
       let minCardY = Infinity;
       let maxCardX = -Infinity;
@@ -143,7 +143,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         maxCardY = Math.max(maxCardY, card.y + h);
       });
 
-      // 卡片在屏幕上的位置范围
       const screenMinX = offset.x + minCardX * scale;
       const screenMinY = offset.y + minCardY * scale;
       const screenMaxX = offset.x + maxCardX * scale;
@@ -151,12 +150,8 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
       let newX = offset.x;
       let newY = offset.y;
+      const padding = 50;
 
-      // 如果所有卡片都在屏幕左侧，允许向右平移，但保留至少一个卡片在屏幕内
-      // 简化：确保至少能看到一部分内容
-      const padding = 50; // 允许超出边界的距离
-
-      // 限制 offset，使得内容不会完全移出可视区域
       if (screenMaxX < -padding) {
         newX = -padding - maxCardX * scale;
       }
@@ -218,7 +213,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
         const newScale = Math.max(0.3, Math.min(3, canvasScale + delta));
 
-        // 以鼠标位置为中心缩放
         const rect = canvasRef.current?.getBoundingClientRect();
         if (rect) {
           const mouseX = e.clientX - rect.left;
@@ -315,7 +309,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     clampCanvasOffset,
   ]);
 
-  // Safari 触摸事件处理
+  // Safari 触摸事件处理 —— 核心修复区域
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -338,11 +332,20 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           y: (touch1.clientY + touch2.clientY) / 2,
         };
 
+        const rect = canvas.getBoundingClientRect();
+        // 计算双指中心对应的世界坐标（画布坐标）
+        const worldCenterX =
+          (center.x - rect.left - canvasOffset.x) / canvasScale;
+        const worldCenterY =
+          (center.y - rect.top - canvasOffset.y) / canvasScale;
+
         pinchStateRef.current = {
           initialDistance: distance,
           initialScale: canvasScale,
           startCenter: center,
           startOffset: { ...canvasOffset },
+          lastCenter: center,
+          worldCenter: { x: worldCenterX, y: worldCenterY },
         };
         isPinchingRef.current = true;
         isTouchBoxSelectingRef.current = false;
@@ -383,6 +386,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         };
 
         const state = pinchStateRef.current;
+        const rect = canvas.getBoundingClientRect();
 
         // 计算新缩放
         let newScale = canvasScale;
@@ -391,15 +395,23 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           newScale = Math.max(0.3, Math.min(3, newScale));
         }
 
-        // 计算新偏移：保持双指中心点在世界坐标中位置不变
-        const startScale = state.initialScale;
+        // === 核心修复 1：以双指中心为缩放原点 ===
+        // 保持 worldCenter 在屏幕上的位置不变
         const newOffsetX =
-          center.x - (newScale * (center.x - state.startOffset.x)) / startScale;
-        const newOffsetY =
-          center.y - (newScale * (center.y - state.startOffset.y)) / startScale;
+          center.x - rect.left - state.worldCenter.x * newScale;
+        const newOffsetY = center.y - rect.top - state.worldCenter.y * newScale;
+
+        // === 核心修复 2：双指平移支持 ===
+        // 计算双指中心从上一帧到现在的移动增量
+        const deltaCenterX = center.x - state.lastCenter.x;
+        const deltaCenterY = center.y - state.lastCenter.y;
+
+        // 最终偏移 = 缩放偏移 + 平移增量
+        const finalOffsetX = newOffsetX + deltaCenterX;
+        const finalOffsetY = newOffsetY + deltaCenterY;
 
         const clampedOffset = clampCanvasOffset(
-          { x: newOffsetX, y: newOffsetY },
+          { x: finalOffsetX, y: finalOffsetY },
           newScale,
         );
 
@@ -408,6 +420,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           setCanvasScale(newScale);
           setCanvasOffset(clampedOffset);
         });
+
+        // 更新 lastCenter 用于下一帧的平移计算
+        pinchStateRef.current.lastCenter = center;
         return;
       }
 
@@ -459,13 +474,18 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      // 双指结束（可能还剩一个手指）
+      // 双指结束处理
       if (isPinchingRef.current) {
-        if (e.touches.length >= 1) {
-          // 还剩手指，可能是双指变单指，继续处理
-          // 重置状态，让单指逻辑接管
-        }
         isPinchingRef.current = false;
+        // 如果还剩一个手指，让单指逻辑接管
+        if (e.touches.length === 1) {
+          const touch = e.touches[0];
+          const point = getCanvasPoint(touch.clientX, touch.clientY);
+          touchBoxStartRef.current = { x: point.x, y: point.y };
+          touchStartTime = Date.now();
+          hasMoved = false;
+          isTouchBoxSelectingRef.current = false;
+        }
         return;
       }
 
