@@ -121,7 +121,7 @@ const SceneManager: React.FC = () => {
         onClick={() => {
           if (confirm("确定清空画布吗？")) clearCanvas();
         }}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
         style={{ borderRadius: "8px" }}
       >
         <span>🗑</span>
@@ -132,7 +132,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={handleSaveScene}
         disabled={!currentSceneId}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
         style={{ borderRadius: "8px" }}
       >
         <span>💾</span>
