@@ -143,7 +143,7 @@ const SceneManager: React.FC = () => {
       <div className="relative">
         <button
           onClick={() => setShowScenes(!showScenes)}
-          className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium"
+          className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
           style={{ borderRadius: "8px" }}
         >
           <span>📂</span>
@@ -209,7 +209,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={handleExport}
         disabled={!currentSceneId}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
         style={{ borderRadius: "8px" }}
       >
         导出
@@ -218,7 +218,7 @@ const SceneManager: React.FC = () => {
       {/* 导入按钮 */}
       <button
         onClick={() => setShowImport(true)}
-        className="bg-white text-green-600 hover:bg-green-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm font-medium"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
         style={{ borderRadius: "8px" }}
       >
         导入
@@ -228,7 +228,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={undo}
         disabled={!canUndo}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
         title="撤销"
         style={{ borderRadius: "8px" }}
       >
@@ -237,7 +237,7 @@ const SceneManager: React.FC = () => {
       <button
         onClick={redo}
         disabled={!canRedo}
-        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg px-2 py-1.5 transition-colors shadow-sm"
+        className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
         title="重做"
         style={{ borderRadius: "8px" }}
       >
@@ -270,7 +270,7 @@ const SceneManager: React.FC = () => {
               </button>
               <button
                 onClick={handleImport}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
                 style={{ borderRadius: "8px" }}
               >
                 导入
