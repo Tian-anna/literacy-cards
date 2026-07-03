@@ -101,6 +101,7 @@ const SceneManager: React.FC = () => {
         className={`bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200 ${
           isUploading ? "cursor-not-allowed" : "cursor-pointer"
         }`}
+        style={{ borderRadius: "8px" }}
       >
         <span>{isUploading ? "⏳" : "📁"}</span>
         <span>{isUploading ? "上传中..." : "添加"}</span>
