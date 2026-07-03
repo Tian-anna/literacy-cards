@@ -170,7 +170,8 @@ const SceneManager: React.FC = () => {
                     setNewSceneName("");
                   }
                 }}
-                className="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
+                style={{ borderRadius: "8px" }}
               >
                 +
               </button>

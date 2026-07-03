@@ -492,7 +492,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               <button
                 onClick={handleSyncFromCloud}
                 disabled={isSyncing}
-                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
+                className="bg-white text-green-600 hover:bg-green-50 disabled:opacity-70 rounded-lg px-3 py-1.5 flex items-center gap-1 transition-colors shadow-sm font-medium border border-green-200"
               >
                 {isSyncing ? (
                   <>

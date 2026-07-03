@@ -23,9 +23,3 @@ canvas,
 img {
   -webkit-touch-callout: none;
 }
-/* 统一所有按钮样式，禁用浏览器默认外观 */
-button {
-  -webkit-appearance: none;
-  appearance: none;
-  border-radius: inherit; /* 让 Tailwind 的 rounded-lg 生效 */
-}
