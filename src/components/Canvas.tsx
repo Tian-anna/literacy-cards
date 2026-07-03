@@ -681,7 +681,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasScale(newScale);
             }}
             className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
-            style={{ fontSize: "12px" }}
+            style={{ borderRadius: "8px", fontSize: "12px" }}
             title="缩小"
           >
             −
@@ -709,7 +709,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasScale(newScale);
             }}
             className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm font-bold transition-colors"
-            style={{ fontSize: "12px" }}
+            style={{ borderRadius: "8px", fontSize: "12px" }}
             title="放大"
           >
             +
@@ -720,7 +720,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
               setCanvasOffset({ x: 0, y: 0 });
             }}
             className="w-6 h-6 bg-white text-green-600 rounded-lg hover:bg-green-50 flex items-center justify-center shadow-sm transition-colors"
-            style={{ fontSize: "12px" }}
+            style={{ borderRadius: "8px", fontSize: "12px" }}
             title="重置"
           >
             ⌂

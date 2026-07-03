@@ -207,7 +207,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const handleSyncCloud = async () => {
     if (
       !confirm(
-        "确定同步云端图片吗？\n\n这会：\n1. 检查所有云端图片是否可访问\n2. 删除 Cloudinary 中已不存在但 Supabase 中仍有的记录\n3. 将云端图片同步到本地图库",
+        "确定同步云端图片吗？\n\n这会:\n1. 检查所有云端图片是否可访问\n2. 删除 Cloudinary 中已不存在但 Supabase 中仍有的记录\n3. 将云端图片同步到本地图库",
       )
     )
       return;
@@ -377,7 +377,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const handleCleanInvalid = async () => {
     if (
       !confirm(
-        "确定清理所有无效图片吗？\n\n这会：\n1. 检查每张云端图片是否可访问\n2. 删除不可访问的云端记录\n3. 清理 Cloudinary 示例图片记录\n4. 清理本地无效图片",
+        "确定清理所有无效图片吗？\n\n这会:\n1. 检查每张云端图片是否可访问\n2. 删除不可访问的云端记录\n3. 清理 Cloudinary 示例图片记录\n4. 清理本地无效图片",
       )
     )
       return;
@@ -418,6 +418,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="flex items-center gap-1 font-medium text-gray-700 hover:text-gray-900"
+            style={{ borderRadius: "8px" }}
           >
             <span>{isExpanded ? "▼" : "▶"}</span>
             <span>图片图库</span>
@@ -444,6 +445,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                       onClick={handleClearAllCloud}
                       className="px-1.5 py-0.5 bg-red-100 text-red-500 rounded hover:bg-red-200"
                       title="清空云端（保留示例图）"
+                      style={{ borderRadius: "8px" }}
                     >
                       清空
                     </button>
