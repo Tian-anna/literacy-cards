@@ -220,6 +220,20 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     };
   }, [displayMode, filteredImages.length]);
 
+  // ==================== Safari 滚动修复：强制重排 ====================
+  // 当懒加载更新内容高度时，Safari 可能无法正确识别新的滚动区域
+  // 通过强制重排触发 Safari 重新计算滚动容器高度
+  useEffect(() => {
+    if (displayMode === "all" && scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      // 强制 Safari 重新计算布局
+      const originalOverflow = el.style.overflow;
+      el.style.overflow = "hidden";
+      void el.offsetHeight; // 强制重排 (reflow)
+      el.style.overflow = originalOverflow || "auto";
+    }
+  }, [loadedCount, displayMode, filteredImages.length]);
+
   useEffect(() => {
     if (displayMode !== "all") return;
 
@@ -471,29 +485,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       setIsCleaning(false);
     }
   };
-
-  // ==================== Safari 触摸滚动修复 ====================
-  const handleScrollTouchStart = useCallback((e: React.TouchEvent) => {
-    // 不阻止默认行为，让 Safari 正常处理滚动
-    // 但记录触摸起始位置用于判断是否是滚动
-    const touch = e.touches[0];
-    (e.currentTarget as HTMLElement).dataset.touchStartY = String(
-      touch.clientY,
-    );
-  }, []);
-
-  const handleScrollTouchMove = useCallback((e: React.TouchEvent) => {
-    const el = e.currentTarget as HTMLElement;
-    const startY = parseFloat(el.dataset.touchStartY || "0");
-    const currentY = e.touches[0].clientY;
-    const deltaY = startY - currentY;
-
-    // 如果是垂直滑动（滚动），不阻止默认行为
-    if (Math.abs(deltaY) > 5) {
-      // 允许默认滚动行为
-      return;
-    }
-  }, []);
 
   return (
     <div className="h-full flex" style={{ fontSize: "12px" }}>
@@ -860,21 +851,26 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             )}
 
-            {/* 图片列表 - Safari 滚动修复 */}
+            {/* ==================== 图片列表 - Safari 滚动修复 ==================== */}
+            {/* 
+              修复说明：
+              1. 移除 touchAction: "pan-y" —— 该属性与 Safari 原生滚动机制冲突
+              2. 删除自定义 handleScrollTouchStart/Move 函数 —— React 合成事件干扰 Safari 滚动
+              3. 使用内联 stopPropagation() —— 仅阻止事件冒泡到画布，不阻止默认滚动行为
+              4. 添加强制重排 useEffect —— 解决懒加载动态内容 Safari 无法识别高度的问题
+            */}
             <div
               ref={scrollContainerRef}
               className="flex-1 overflow-y-auto p-2 image-library-scroll"
               style={{
-                WebkitOverflowScrolling: "touch",
                 overscrollBehavior: "contain",
-                touchAction: "pan-y", // 只允许垂直滚动
                 WebkitTouchCallout: "none",
                 WebkitUserSelect: "none",
                 userSelect: "none",
               }}
-              // Safari 触摸事件处理
-              onTouchStart={handleScrollTouchStart}
-              onTouchMove={handleScrollTouchMove}
+              // 关键修复：只阻止事件冒泡到画布层，不阻止 Safari 默认滚动
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
             >
               {totalCount === 0 ? (
                 <div className="text-center py-8 text-gray-400">
@@ -900,7 +896,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                             : "border-gray-200 hover:border-green-300"
                         }`}
                         onClick={() => handleImageClick(image.id)}
-                        // 关键修复：阻止图片项的触摸事件冒泡到画布
+                        // 阻止图片项的触摸事件冒泡到画布
                         onTouchStart={(e) => e.stopPropagation()}
                         onTouchMove={(e) => e.stopPropagation()}
                       >

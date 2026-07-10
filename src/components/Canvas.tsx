@@ -318,6 +318,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     let hasMoved = false;
 
     const onTouchStart = (e: TouchEvent) => {
+      // ==================== 关键修复：图库滚动优先 ====================
+      // 如果触摸目标在图库内，完全不处理，让图库自己的滚动逻辑接管
+      const target = e.target as HTMLElement;
+      if (target.closest(".image-library-scroll")) {
+        return;
+      }
+
       // 双指：缩放 + 平移
       if (e.touches.length === 2) {
         e.preventDefault();
@@ -354,7 +361,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
 
       // 单指
       const touch = e.touches[0];
-      const target = e.target as HTMLElement;
       if (target.closest(".placed-card")) return;
       if (!canvas.contains(target)) return;
 
@@ -371,6 +377,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      // ==================== 关键修复：图库滚动优先 ====================
+      // 如果触摸目标在图库内，完全不处理，让 Safari 原生滚动接管
+      const target = e.target as HTMLElement;
+      if (target.closest(".image-library-scroll")) {
+        return;
+      }
+
       // 双指：缩放 + 平移（以双指中心为原点）
       if (e.touches.length === 2 && isPinchingRef.current) {
         e.preventDefault();
@@ -429,12 +442,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       // 单指移动
       if (e.touches.length !== 1) return;
 
-      const target = e.target as HTMLElement;
-      // 关键修复：如果触摸目标在图库内，不阻止默认行为，让图库滚动
-      if (target.closest(".image-library-scroll")) {
-        return;
-      }
-
       if (!canvas.contains(target)) return;
       if (target.closest(".placed-card")) return;
 
@@ -482,6 +489,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchEnd = (e: TouchEvent) => {
+      // ==================== 关键修复：图库滚动优先 ====================
+      // 检查触摸结束的目标，如果在图库内则不处理
+      const target = e.target as HTMLElement;
+      if (target.closest(".image-library-scroll")) {
+        return;
+      }
+
       // 双指结束处理
       if (isPinchingRef.current) {
         isPinchingRef.current = false;
