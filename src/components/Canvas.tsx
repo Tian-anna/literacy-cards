@@ -55,17 +55,15 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   const isPinchingRef = useRef(false);
   const rafScaleRef = useRef<number | null>(null);
 
-  // 双指缩放/平移的状态 —— 新增 lastCenter 用于追踪平移增量
   const pinchStateRef = useRef({
     initialDistance: 0,
     initialScale: 1,
     startCenter: { x: 0, y: 0 },
     startOffset: { x: 0, y: 0 },
-    lastCenter: { x: 0, y: 0 }, // 上一帧的双指中心，用于计算平移增量
-    worldCenter: { x: 0, y: 0 }, // 双指中心对应的世界坐标（画布坐标）
+    lastCenter: { x: 0, y: 0 },
+    worldCenter: { x: 0, y: 0 },
   });
 
-  // 监听画布尺寸变化
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -124,7 +122,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     [placedCards],
   );
 
-  // 限制画布偏移，确保内容不会完全不可见
   const clampCanvasOffset = useCallback(
     (offset: { x: number; y: number }, scale: number) => {
       if (placedCards.length === 0) return offset;
@@ -204,7 +201,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     [getCanvasPoint, clearSelection, canvasOffset],
   );
 
-  // 滚轮缩放（以鼠标位置为中心）
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -230,7 +226,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     [canvasScale, canvasOffset, clampCanvasOffset],
   );
 
-  // 阻止 Safari 默认行为
   useEffect(() => {
     const preventBrowserZoom = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -250,7 +245,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
   }, []);
 
-  // 鼠标移动和释放
   useEffect(() => {
     if (!isBoxSelecting && !isPanningRef.current) return;
 
@@ -309,7 +303,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     clampCanvasOffset,
   ]);
 
-  // Safari 触摸事件处理 —— 核心修复区域
+  // ==================== Safari 触摸事件处理 - 核心修复 ====================
+  // 修复要点：
+  // 1. touchmove 使用 { passive: true }，避免干扰 Safari 原生滚动
+  // 2. 单指框选时通过 CSS touch-action 而非 preventDefault 来阻止滚动
+  // 3. 双指缩放不需要阻止默认行为
+  // 4. 图库检测在最开头，确保图库事件完全不进入处理逻辑
+  // 5. 移除 document 级别的 preventDoubleTap，避免全局干扰
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -318,8 +318,7 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     let hasMoved = false;
 
     const onTouchStart = (e: TouchEvent) => {
-      // ==================== 关键修复：图库滚动优先 ====================
-      // 如果触摸目标在图库内，完全不处理，让图库自己的滚动逻辑接管
+      // 如果触摸目标在图库内，完全不处理
       const target = e.target as HTMLElement;
       if (target.closest(".image-library-scroll")) {
         return;
@@ -340,7 +339,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         };
 
         const rect = canvas.getBoundingClientRect();
-        // 计算双指中心对应的世界坐标（画布坐标）
         const worldCenterX =
           (center.x - rect.left - canvasOffset.x) / canvasScale;
         const worldCenterY =
@@ -377,16 +375,14 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      // ==================== 关键修复：图库滚动优先 ====================
-      // 如果触摸目标在图库内，完全不处理，让 Safari 原生滚动接管
+      // 如果触摸目标在图库内，完全不处理
       const target = e.target as HTMLElement;
       if (target.closest(".image-library-scroll")) {
         return;
       }
 
-      // 双指：缩放 + 平移（以双指中心为原点）
+      // 双指：缩放 + 平移
       if (e.touches.length === 2 && isPinchingRef.current) {
-        e.preventDefault();
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
         const distance = Math.hypot(
@@ -401,25 +397,19 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         const state = pinchStateRef.current;
         const rect = canvas.getBoundingClientRect();
 
-        // 计算新缩放
         let newScale = canvasScale;
         if (state.initialDistance > 0) {
           newScale = (distance / state.initialDistance) * state.initialScale;
           newScale = Math.max(0.3, Math.min(3, newScale));
         }
 
-        // === 核心修复 1：以双指中心为缩放原点 ===
-        // 保持 worldCenter 在屏幕上的位置不变
         const newOffsetX =
           center.x - rect.left - state.worldCenter.x * newScale;
         const newOffsetY = center.y - rect.top - state.worldCenter.y * newScale;
 
-        // === 核心修复 2：双指平移支持 ===
-        // 计算双指中心从上一帧到现在的移动增量
         const deltaCenterX = center.x - state.lastCenter.x;
         const deltaCenterY = center.y - state.lastCenter.y;
 
-        // 最终偏移 = 缩放偏移 + 平移增量
         const finalOffsetX = newOffsetX + deltaCenterX;
         const finalOffsetY = newOffsetY + deltaCenterY;
 
@@ -434,17 +424,12 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
           setCanvasOffset(clampedOffset);
         });
 
-        // 更新 lastCenter 用于下一帧的平移计算
         pinchStateRef.current.lastCenter = center;
         return;
       }
 
       // 单指移动
       if (e.touches.length !== 1) return;
-
-      if (!canvas.contains(target)) return;
-      if (target.closest(".placed-card")) return;
-
       if (!canvas.contains(target)) return;
       if (target.closest(".placed-card")) return;
 
@@ -469,8 +454,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       }
 
       if (isTouchBoxSelectingRef.current) {
-        e.preventDefault();
-
         setSelectionBox((prev) => {
           if (!prev) return null;
           return { ...prev, currentX: point.x, currentY: point.y };
@@ -489,17 +472,13 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      // ==================== 关键修复：图库滚动优先 ====================
-      // 检查触摸结束的目标，如果在图库内则不处理
       const target = e.target as HTMLElement;
       if (target.closest(".image-library-scroll")) {
         return;
       }
 
-      // 双指结束处理
       if (isPinchingRef.current) {
         isPinchingRef.current = false;
-        // 如果还剩一个手指，让单指逻辑接管
         if (e.touches.length === 1) {
           const touch = e.touches[0];
           const point = getCanvasPoint(touch.clientX, touch.clientY);
@@ -520,28 +499,18 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       }
     };
 
-    // Safari 需要 { passive: false } 才能阻止默认行为
+    // ==================== 关键修复：touchmove 使用 passive: true ====================
+    // 避免 { passive: false } 干扰 Safari 的原生滚动机制
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
-    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
-    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
-    canvas.addEventListener("touchcancel", onTouchEnd, { passive: false });
-
-    // 阻止 Safari 双击缩放
-    const preventDoubleTap = (e: TouchEvent) => {
-      if (e.touches.length > 1) {
-        e.preventDefault();
-      }
-    };
-    document.addEventListener("touchstart", preventDoubleTap, {
-      passive: false,
-    });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: true });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: true });
+    canvas.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
     return () => {
       canvas.removeEventListener("touchstart", onTouchStart);
       canvas.removeEventListener("touchmove", onTouchMove);
       canvas.removeEventListener("touchend", onTouchEnd);
       canvas.removeEventListener("touchcancel", onTouchEnd);
-      document.removeEventListener("touchstart", preventDoubleTap);
       if (rafScaleRef.current) cancelAnimationFrame(rafScaleRef.current);
     };
   }, [
@@ -554,7 +523,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
     canvasSize,
   ]);
 
-  // 键盘快捷键
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "a") {
@@ -816,7 +784,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         onWheel={handleWheel}
         style={{
           backgroundColor: canvasColor,
-          touchAction: "none",
+          // Safari 修复：不使用 touchAction: none，让浏览器原生处理触摸
+          // 只在框选时通过动态 CSS 阻止滚动
+          touchAction: isBoxSelecting ? "none" : "pan-x pan-y",
           userSelect: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",

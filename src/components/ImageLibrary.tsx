@@ -122,13 +122,15 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     };
 
     window.addEventListener("mousemove", handleMouseMove, { passive: false });
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchmove", handleTouchResizeStart, {
+      passive: false,
+    });
     window.addEventListener("mouseup", handleEnd);
     window.addEventListener("touchend", handleEnd);
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchmove", handleTouchResizeStart);
       window.removeEventListener("mouseup", handleEnd);
       window.removeEventListener("touchend", handleEnd);
     };
@@ -220,8 +222,8 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     };
   }, [displayMode, filteredImages.length]);
 
-  // ==================== Safari 滚动修复：强制重排 ====================
-  // 当懒加载更新内容高度时，Safari 可能无法正确识别新的滚动区域
+  // ==================== Safari 滚动修复：强制重排 + 高度刷新 ====================
+  // Safari 在动态内容加载后无法自动识别新的滚动区域高度
   // 通过强制重排触发 Safari 重新计算滚动容器高度
   useEffect(() => {
     if (displayMode === "all" && scrollContainerRef.current) {
@@ -230,9 +232,38 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       const originalOverflow = el.style.overflow;
       el.style.overflow = "hidden";
       void el.offsetHeight; // 强制重排 (reflow)
-      el.style.overflow = originalOverflow || "auto";
+      el.style.overflow = originalOverflow || "";
     }
   }, [loadedCount, displayMode, filteredImages.length]);
+
+  // 额外的 Safari 修复：使用 IntersectionObserver 检测图片加载
+  useEffect(() => {
+    if (displayMode !== "all") return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const img = entry.target as HTMLImageElement;
+            if (img.complete) {
+              container.style.overflow = "scroll";
+              setTimeout(() => {
+                container.style.overflow = "";
+              }, 0);
+            }
+          }
+        });
+      },
+      { root: container, threshold: 0.1 },
+    );
+
+    const images = container.querySelectorAll("img");
+    images.forEach((img) => observer.observe(img));
+
+    return () => observer.disconnect();
+  }, [displayMode, loadedCount]);
 
   useEffect(() => {
     if (displayMode !== "all") return;
@@ -851,26 +882,37 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             )}
 
-            {/* ==================== 图片列表 - Safari 滚动修复 ==================== */}
+            {/* ==================== 图片列表 - Safari 滚动核心修复 ==================== */}
             {/* 
-              修复说明：
-              1. 移除 touchAction: "pan-y" —— 该属性与 Safari 原生滚动机制冲突
-              2. 删除自定义 handleScrollTouchStart/Move 函数 —— React 合成事件干扰 Safari 滚动
-              3. 使用内联 stopPropagation() —— 仅阻止事件冒泡到画布，不阻止默认滚动行为
-              4. 添加强制重排 useEffect —— 解决懒加载动态内容 Safari 无法识别高度的问题
+              Safari 滚动修复要点：
+              1. 不设置 touchAction —— Safari 只支持 auto/manipulation，其他值无效或有害
+              2. 设置 -webkit-overflow-scrolling: touch —— iOS Safari 惯性滚动必需
+              3. 不添加任何 React onTouchStart/onTouchMove 事件处理器 —— 避免干扰原生滚动
+              4. 确保容器有明确的高度计算 —— flex-1 需要父容器有确定高度
+              5. 使用 stopPropagation 仅阻止事件冒泡到画布，不阻止默认行为
             */}
             <div
               ref={scrollContainerRef}
               className="flex-1 overflow-y-auto p-2 image-library-scroll"
               style={{
+                // iOS Safari 惯性滚动必需
+                WebkitOverflowScrolling: "touch",
+                // 防止弹性滚动传播到父元素
                 overscrollBehavior: "contain",
+                // 防止文本选择干扰滚动
                 WebkitTouchCallout: "none",
                 WebkitUserSelect: "none",
                 userSelect: "none",
+                // 确保 Safari 正确识别为可滚动区域
+                position: "relative",
               }}
-              // 关键修复：只阻止事件冒泡到画布层，不阻止 Safari 默认滚动
-              onTouchStart={(e) => e.stopPropagation()}
-              onTouchMove={(e) => e.stopPropagation()}
+              // 只阻止事件冒泡到画布层，绝不阻止默认滚动行为
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
+              onTouchMove={(e) => {
+                e.stopPropagation();
+              }}
             >
               {totalCount === 0 ? (
                 <div className="text-center py-8 text-gray-400">

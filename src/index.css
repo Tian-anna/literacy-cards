@@ -1,25 +1,99 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
-/* 添加以下样式 */
+/* ==================== Safari 滚动修复 ==================== */
+
+/* 
+ * 注意：不要全局设置 touch-action: none！
+ * 这会阻止所有元素的触摸滚动，包括图库的 overflow 滚动。
+ * 只在需要阻止触摸操作的特定元素上设置。
+ */
+
+/* 基础设置：允许触摸操作，但防止双击缩放 */
 * {
-  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 防止文本选择（不影响滚动） */
+.no-select {
   -webkit-user-select: none;
   user-select: none;
 }
 
+/* 页面根容器：全屏但允许内部滚动 */
 html,
 body,
 #root {
   height: 100%;
-  overflow: hidden;
+  /* 不要在这里设置 overflow: hidden，让内部容器自己管理滚动 */
 }
 
+/* 画布和卡片：阻止触摸时的默认行为（如弹出菜单） */
 canvas,
-img {
+.placed-card,
+.placed-card img {
   -webkit-touch-callout: none;
+}
+
+/* ==================== 图库滚动容器 Safari 修复 ==================== */
+
+.image-library-scroll {
+  /* iOS Safari 惯性滚动必需 - 没有这个就无法平滑滚动 */
+  -webkit-overflow-scrolling: touch !important;
+  /* 确保是块级格式化上下文 */
+  display: block;
+  /* 明确的滚动方向 */
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  /* 确保 Safari 正确识别为可滚动区域 */
+  position: relative;
+}
+
+/* 修复 Safari 中 flex 容器内的滚动问题 */
+.image-library-scroll::before,
+.image-library-scroll::after {
+  content: "";
+  display: table;
+}
+
+/* 确保图片加载后滚动区域正确更新 */
+.image-library-scroll img {
+  min-height: 1px;
+}
+
+/* ==================== 画布容器触摸控制 ==================== */
+
+/* 画布默认允许触摸平移 */
+.canvas-container {
+  touch-action: pan-x pan-y;
+}
+
+/* 框选时临时阻止画布滚动（由 JS 动态添加/移除类名） */
+.canvas-container.box-selecting {
+  touch-action: none;
+}
+
+/* ==================== iOS 设备专用修复 ==================== */
+
+@supports (-webkit-touch-callout: none) {
+  /* iOS 设备专用 */
+
+  .scrollable {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 修复 flex 布局中的滚动问题 */
+  .flex-scroll-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* 关键：允许 flex 子项收缩 */
+  }
+
+  .flex-scroll-container > .scroll-area {
+    flex: 1;
+    min-height: 0; /* 关键：允许滚动区域收缩 */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
