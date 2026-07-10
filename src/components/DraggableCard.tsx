@@ -185,7 +185,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
-
       e.preventDefault();
 
       const touch = e.touches[0];
@@ -200,9 +199,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       longPressTimerRef.current = setTimeout(() => {
         isLongPressRef.current = true;
         setShowControls(true);
-        if (navigator.vibrate) {
-          navigator.vibrate(50);
-        }
+        if (navigator.vibrate) navigator.vibrate(50);
       }, 500);
 
       const store = useStore.getState();
@@ -223,7 +220,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
 
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
-
       e.preventDefault();
 
       const touch = e.touches[0];
@@ -397,6 +393,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         </div>
       )}
 
+      {/* ========== 修复 2：图片加载失败不删除，显示占位符 ========== */}
       {imageLoaded ? (
         <img
           src={image.src}
@@ -410,6 +407,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           onError={() => {
             console.error("画布图片加载失败:", image.src);
             setImageLoaded(false);
+            // 注意：这里只设置加载状态为失败，不调用 removeCard
           }}
         />
       ) : (

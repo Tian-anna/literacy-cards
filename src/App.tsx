@@ -1,11 +1,114 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import SceneManager from "@/components/SceneManager";
 import ImageLibrary from "@/components/ImageLibrary";
 import Canvas from "@/components/Canvas";
-import { useStore } from "@/store/useStore";
+import { useStore, checkStorage } from "@/store/useStore";
 
+// ==================== Safari 存储调试面板 ====================
+const StorageDebugger: React.FC = () => {
+  const [info, setInfo] = useState<string[]>([]);
+  const images = useStore((s) => s.images);
+  const _hasHydrated = useStore((s) => s._hasHydrated);
+
+  const refreshInfo = useCallback(() => {
+    const lines: string[] = [];
+
+    lines.push(
+      `IndexedDB: ${typeof window !== "undefined" && window.indexedDB ? "✅" : "❌"}`,
+    );
+
+    try {
+      const testKey = "__safari_test__";
+      localStorage.setItem(testKey, "1");
+      localStorage.removeItem(testKey);
+      lines.push("localStorage: ✅");
+    } catch {
+      lines.push("localStorage: ❌（无痕模式）");
+    }
+
+    lines.push(`图库: ${images.length} 张`);
+    lines.push(`Hydrated: ${_hasHydrated ? "✅" : "⏳"}`);
+
+    const base64Count = images.filter((img) =>
+      img.src?.startsWith("data:"),
+    ).length;
+    const blobCount = images.filter((img) =>
+      img.src?.startsWith("blob:"),
+    ).length;
+    const httpCount = images.filter((img) =>
+      img.src?.startsWith("http"),
+    ).length;
+    lines.push(
+      `URL: HTTP=${httpCount} Base64=${base64Count} Blob=${blobCount}`,
+    );
+
+    setInfo(lines);
+  }, [images, _hasHydrated]);
+
+  useEffect(() => {
+    refreshInfo();
+  }, [refreshInfo]);
+
+  // Vite 标准写法，无类型问题
+  if (import.meta.env.PROD) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: "rgba(0,0,0,0.85)",
+        color: "#0f0",
+        fontSize: "11px",
+        padding: "6px 12px",
+        zIndex: 9999,
+        fontFamily: "monospace",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      <span>{info.join(" | ")}</span>
+      <button
+        onClick={() => {
+          checkStorage();
+          refreshInfo();
+        }}
+        style={{
+          fontSize: "11px",
+          padding: "2px 8px",
+          background: "#333",
+          color: "#0f0",
+          border: "1px solid #0f0",
+          borderRadius: 4,
+          cursor: "pointer",
+        }}
+      >
+        检查存储
+      </button>
+    </div>
+  );
+};
+
+// ==================== 主应用组件 ====================
 const App: React.FC = () => {
   const [sidebarWidth, setSidebarWidth] = useState(200);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = useStore.subscribe((state) => {
+      if (state._hasHydrated) {
+        setIsReady(true);
+        unsubscribe();
+      }
+    });
+    const timeout = setTimeout(() => setIsReady(true), 3000);
+    return () => clearTimeout(timeout);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -44,8 +147,24 @@ const App: React.FC = () => {
   }, []);
 
   const handleAddToCanvas = (imageId: string) => {
-    useStore.getState().addCardToScene(imageId);
+    const store = useStore.getState();
+    const canvasWidth = window.innerWidth - sidebarWidth;
+    const canvasHeight = window.innerHeight - 100;
+    const x = Math.max(50, (canvasWidth - 120) / 2);
+    const y = Math.max(50, (canvasHeight - 120) / 2);
+    store.addCardToScene(imageId, x, y);
   };
+
+  if (!isReady) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#e8e8e8]">
+        <div className="text-center">
+          <div className="text-2xl mb-2">⏳</div>
+          <p className="text-gray-500 text-sm">正在恢复数据...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#e8e8e8] overflow-hidden select-none">
@@ -60,6 +179,7 @@ const App: React.FC = () => {
           <Canvas sidebarWidth={sidebarWidth} />
         </div>
       </div>
+      <StorageDebugger />
     </div>
   );
 };

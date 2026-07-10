@@ -1,9 +1,90 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist, createJSONStorage, StateStorage } from "zustand/middleware";
 import { CardImage, Scene, PlacedCard } from "@/types";
 import { v4 as uuidv4 } from "uuid";
-import { get, set, del } from "idb-keyval";
+import { get, set, del, keys } from "idb-keyval";
 
+// ==================== Safari IndexedDB 兼容性检测 ====================
+let isIndexedDBAvailable = false;
+
+function checkIndexedDB(): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      if (typeof window === "undefined" || !window.indexedDB) {
+        resolve(false);
+        return;
+      }
+      const request = window.indexedDB.open("__test_db__", 1);
+      request.onsuccess = () => {
+        request.result.close();
+        window.indexedDB.deleteDatabase("__test_db__");
+        isIndexedDBAvailable = true;
+        resolve(true);
+      };
+      request.onerror = () => resolve(false);
+      request.onblocked = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+// 内存回退存储（用于无痕模式或 IndexedDB 不可用）
+let memoryFallback: Record<string, string> = {};
+
+const idbStorage: StateStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    try {
+      if (!isIndexedDBAvailable) return memoryFallback[name] || null;
+      const value = await get(name);
+      return value ?? null;
+    } catch (e) {
+      console.warn("[Store] IndexedDB 读取失败，使用内存回退:", e);
+      return memoryFallback[name] || null;
+    }
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    try {
+      if (!isIndexedDBAvailable) {
+        memoryFallback[name] = value;
+        return;
+      }
+      await set(name, value);
+    } catch (e) {
+      console.warn("[Store] IndexedDB 写入失败，使用内存回退:", e);
+      memoryFallback[name] = value;
+    }
+  },
+  removeItem: async (name: string): Promise<void> => {
+    try {
+      if (!isIndexedDBAvailable) {
+        delete memoryFallback[name];
+        return;
+      }
+      await del(name);
+    } catch (e) {
+      console.warn("[Store] IndexedDB 删除失败:", e);
+      delete memoryFallback[name];
+    }
+  },
+};
+
+// 调试工具
+export const checkStorage = async () => {
+  try {
+    const allKeys = await keys();
+    console.log("[Store] IndexedDB 所有键:", allKeys);
+    for (const key of allKeys) {
+      const value = await get(key);
+      const size = value ? JSON.stringify(value).length : 0;
+      console.log(`[Store] 键 "${key}": ${size} 字符`);
+    }
+  } catch (e) {
+    console.warn("[Store] 无法检查存储:", e);
+  }
+};
+
+// ==================== Store 接口 ====================
 interface StoreState {
   images: CardImage[];
   addImage: (image: Omit<CardImage, "id" | "createdAt">) => void;
@@ -67,6 +148,10 @@ interface StoreState {
 
   cleanInvalidImages: () => Promise<void>;
   cleanDuplicateImages: () => void;
+
+  // 持久化状态
+  _hasHydrated: boolean;
+  setHasHydrated: (hasHydrated: boolean) => void;
 }
 
 export const useStore = create<StoreState>()(
@@ -251,6 +336,7 @@ export const useStore = create<StoreState>()(
           ),
         })),
 
+      // 修复：移除随机偏移，固定位置
       addCardToScene: (imageId, x = 100, y = 100) => {
         let sceneId = get().currentSceneId;
         if (!sceneId) {
@@ -451,7 +537,6 @@ export const useStore = create<StoreState>()(
         }
 
         set({ images: validImages });
-        set({ images: validImages });
       },
 
       cleanDuplicateImages: () => {
@@ -480,21 +565,14 @@ export const useStore = create<StoreState>()(
           };
         });
       },
+
+      // 持久化 hydration 状态
+      _hasHydrated: false,
+      setHasHydrated: (hasHydrated) => set({ _hasHydrated: hasHydrated }),
     }),
     {
       name: "literacy-card-storage",
-      storage: createJSONStorage(() => ({
-        getItem: async (name: string) => {
-          const value = await get(name);
-          return value ?? null;
-        },
-        setItem: async (name: string, value: any) => {
-          await set(name, value);
-        },
-        removeItem: async (name: string) => {
-          await del(name);
-        },
-      })),
+      storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({
         images: state.images,
         scenes: state.scenes,
@@ -505,6 +583,26 @@ export const useStore = create<StoreState>()(
         snapToGrid: state.snapToGrid,
         categories: state.categories,
       }),
+      // 移除自定义 serialize/deserialize，使用 zustand 默认的 JSON 序列化
+      // 因为 partialize 已经排除了 Set 类型的 selectedIds，无需自定义处理
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.error("[Store] 持久化恢复失败:", error);
+        } else {
+          console.log(
+            "[Store] 持久化恢复成功，图片数量:",
+            state?.images?.length || 0,
+          );
+          state?.setHasHydrated?.(true);
+        }
+      },
     },
   ),
 );
+
+// 初始化时检测 IndexedDB
+if (typeof window !== "undefined") {
+  checkIndexedDB().then((available) => {
+    console.log("[Store] IndexedDB 可用性:", available);
+  });
+}
