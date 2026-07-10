@@ -56,17 +56,11 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         return { x, y };
       }
 
-      // 卡片在屏幕上的位置
-      // screenX = canvasOffset.x + x * canvasScale
-      // 限制：0 <= screenX <= canvasSize.width - cardW * canvasScale
-      // 即：-canvasOffset.x / canvasScale <= x <= (canvasSize.width - canvasOffset.x) / canvasScale - cardW
-
       const minX = -canvasOffset.x / canvasScale;
       const minY = -canvasOffset.y / canvasScale;
       const maxX = (canvasSize.width - canvasOffset.x) / canvasScale - cardW;
       const maxY = (canvasSize.height - canvasOffset.y) / canvasScale - cardH;
 
-      // 如果画布比卡片还小，至少让卡片左上角在可视区域内
       const clampedX = Math.max(minX, Math.min(maxX, x));
       const clampedY = Math.max(minY, Math.min(maxY, y));
 
@@ -138,13 +132,11 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         let newX = pos.x + dx;
         let newY = pos.y + dy;
 
-        // 获取该卡片的尺寸
         const store = useStore.getState();
         const c = store.placedCards.find((p) => p.instanceId === id);
         const cardW = c ? 120 * (c.scale || 1) : 120;
         const cardH = c ? 120 * (c.scale || 1) : 120;
 
-        // 应用边界限制
         const clamped = clampPosition(newX, newY, cardW, cardH);
         newX = clamped.x;
         newY = clamped.y;
@@ -194,7 +186,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
 
-      // Safari: 阻止默认行为防止页面滚动
       e.preventDefault();
 
       const touch = e.touches[0];
@@ -206,7 +197,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       isLongPressRef.current = false;
       lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
 
-      // 长按检测（500ms）
       longPressTimerRef.current = setTimeout(() => {
         isLongPressRef.current = true;
         setShowControls(true);
@@ -234,14 +224,12 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
 
-      // Safari: 阻止默认行为
       e.preventDefault();
 
       const touch = e.touches[0];
       const dx = (touch.clientX - dragStartRef.current.x) / canvasScale;
       const dy = (touch.clientY - dragStartRef.current.y) / canvasScale;
 
-      // 如果移动超过 10px，取消长按
       if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
         if (longPressTimerRef.current) {
           clearTimeout(longPressTimerRef.current);
@@ -272,18 +260,15 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       }
 
       if (isTouchDraggingRef.current) {
-        // 基于初始位置 + 总位移
         initialPositionsRef.current.forEach((pos, id) => {
           let newX = pos.x + dx;
           let newY = pos.y + dy;
 
-          // 获取该卡片的尺寸
           const store = useStore.getState();
           const c = store.placedCards.find((p) => p.instanceId === id);
           const cardW = c ? 120 * (c.scale || 1) : 120;
           const cardH = c ? 120 * (c.scale || 1) : 120;
 
-          // 应用边界限制
           const clamped = clampPosition(newX, newY, cardW, cardH);
           newX = clamped.x;
           newY = clamped.y;
@@ -301,7 +286,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      // 清除长按定时器
       if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
@@ -314,7 +298,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         setIsDragging(false);
         useStore.getState().saveHistory();
       } else if (touchDuration < 300 && !hasMoved && !isLongPressRef.current) {
-        // 短点击 - 切换选中
         e.preventDefault();
         const store = useStore.getState();
         if (
@@ -331,7 +314,6 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
       isLongPressRef.current = false;
     };
 
-    // Safari 需要 { passive: false }
     el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: false });

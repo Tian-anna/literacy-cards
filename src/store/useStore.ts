@@ -264,8 +264,8 @@ export const useStore = create<StoreState>()(
         const newCard: PlacedCard = {
           instanceId: uuidv4(),
           imageId,
-          x: x + Math.random() * 20,
-          y: y + Math.random() * 20,
+          x: x,
+          y: y,
           rotation: 0,
           scale: 1,
           zIndex: maxZ + 1,
@@ -451,10 +451,6 @@ export const useStore = create<StoreState>()(
         }
 
         set({ images: validImages });
-
-        // 2. 同时清理云端无效图片（由 cloudinaryApi 处理）
-        // 返回结果在 ImageLibrary 中显示
-
         set({ images: validImages });
       },
 
