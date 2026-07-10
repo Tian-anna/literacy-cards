@@ -64,11 +64,8 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // 显示模式：分页 / 全部
   const [displayMode, setDisplayMode] = useState<"page" | "all">("page");
-  // 全部模式下已加载数量
   const [loadedCount, setLoadedCount] = useState(0);
-  // 全部模式是否正在加载
   const [isLoadingAll, setIsLoadingAll] = useState(false);
 
   const isResizingRef = useRef(false);
@@ -195,7 +192,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     return result;
   }, [images, selectedCategory, searchTerm, sortBy, sortOrder]);
 
-  // 懒加载 useEffect
   useEffect(() => {
     if (displayMode !== "all") {
       setLoadedCount(0);
@@ -224,7 +220,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     };
   }, [displayMode, filteredImages.length]);
 
-  // 滚动加载 useEffect
   useEffect(() => {
     if (displayMode !== "all") return;
 
@@ -478,26 +473,26 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   };
 
   // ==================== Safari 触摸滚动修复 ====================
-  // 阻止触摸事件冒泡到父级，确保滚动容器可以正常滚动
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    // 只在单指触摸时记录，允许默认滚动行为
-    if (e.touches.length === 1) {
-      // 不阻止默认行为，让 Safari 正常处理滚动
-      return;
-    }
+  const handleScrollTouchStart = useCallback((e: React.TouchEvent) => {
+    // 不阻止默认行为，让 Safari 正常处理滚动
+    // 但记录触摸起始位置用于判断是否是滚动
+    const touch = e.touches[0];
+    (e.currentTarget as HTMLElement).dataset.touchStartY = String(
+      touch.clientY,
+    );
   }, []);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
+  const handleScrollTouchMove = useCallback((e: React.TouchEvent) => {
+    const el = e.currentTarget as HTMLElement;
+    const startY = parseFloat(el.dataset.touchStartY || "0");
+    const currentY = e.touches[0].clientY;
+    const deltaY = startY - currentY;
 
-    // 如果是单指滑动，不阻止默认行为，让 Safari 处理滚动
-    if (e.touches.length === 1) {
+    // 如果是垂直滑动（滚动），不阻止默认行为
+    if (Math.abs(deltaY) > 5) {
+      // 允许默认滚动行为
       return;
     }
-
-    // 多指操作（如缩放）时阻止默认行为
-    e.preventDefault();
   }, []);
 
   return (
@@ -868,19 +863,18 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             {/* 图片列表 - Safari 滚动修复 */}
             <div
               ref={scrollContainerRef}
-              className="flex-1 overflow-y-auto p-2"
+              className="flex-1 overflow-y-auto p-2 image-library-scroll"
               style={{
                 WebkitOverflowScrolling: "touch",
                 overscrollBehavior: "contain",
-                // 关键修复：确保 Safari 可以正常滚动
-                touchAction: "pan-y",
+                touchAction: "pan-y", // 只允许垂直滚动
                 WebkitTouchCallout: "none",
                 WebkitUserSelect: "none",
                 userSelect: "none",
               }}
               // Safari 触摸事件处理
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
+              onTouchStart={handleScrollTouchStart}
+              onTouchMove={handleScrollTouchMove}
             >
               {totalCount === 0 ? (
                 <div className="text-center py-8 text-gray-400">
@@ -906,8 +900,9 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                             : "border-gray-200 hover:border-green-300"
                         }`}
                         onClick={() => handleImageClick(image.id)}
-                        // 阻止图片区域的触摸事件冒泡，避免与滚动冲突
+                        // 关键修复：阻止图片项的触摸事件冒泡到画布
                         onTouchStart={(e) => e.stopPropagation()}
+                        onTouchMove={(e) => e.stopPropagation()}
                       >
                         <div className="w-full h-full bg-gray-50 flex items-center justify-center">
                           {image.src ? (

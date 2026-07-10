@@ -430,6 +430,14 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       if (e.touches.length !== 1) return;
 
       const target = e.target as HTMLElement;
+      // 关键修复：如果触摸目标在图库内，不阻止默认行为，让图库滚动
+      if (target.closest(".image-library-scroll")) {
+        return;
+      }
+
+      if (!canvas.contains(target)) return;
+      if (target.closest(".placed-card")) return;
+
       if (!canvas.contains(target)) return;
       if (target.closest(".placed-card")) return;
 
