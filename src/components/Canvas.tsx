@@ -304,12 +304,6 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
   ]);
 
   // ==================== Safari 触摸事件处理 - 核心修复 ====================
-  // 修复要点：
-  // 1. touchmove 使用 { passive: true }，避免干扰 Safari 原生滚动
-  // 2. 单指框选时通过 CSS touch-action 而非 preventDefault 来阻止滚动
-  // 3. 双指缩放不需要阻止默认行为
-  // 4. 图库检测在最开头，确保图库事件完全不进入处理逻辑
-  // 5. 移除 document 级别的 preventDoubleTap，避免全局干扰
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -324,9 +318,12 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         return;
       }
 
+      // 阻止画布触摸事件冒泡到浏览器，防止触发 Safari 左右滑动返回
+      e.preventDefault();
+      e.stopPropagation();
+
       // 双指：缩放 + 平移
       if (e.touches.length === 2) {
-        e.preventDefault();
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
         const distance = Math.hypot(
@@ -380,6 +377,10 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       if (target.closest(".image-library-scroll")) {
         return;
       }
+
+      // 阻止画布触摸移动触发浏览器手势
+      e.preventDefault();
+      e.stopPropagation();
 
       // 双指：缩放 + 平移
       if (e.touches.length === 2 && isPinchingRef.current) {
@@ -477,6 +478,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         return;
       }
 
+      e.preventDefault();
+      e.stopPropagation();
+
       if (isPinchingRef.current) {
         isPinchingRef.current = false;
         if (e.touches.length === 1) {
@@ -499,12 +503,12 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
       }
     };
 
-    // ==================== 关键修复：touchmove 使用 passive: true ====================
-    // 避免 { passive: false } 干扰 Safari 的原生滚动机制
+    // ==================== 关键修复：全部改为 passive: false ====================
+    // 允许在画布上阻止默认行为，防止 Safari 左右滑动返回
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
-    canvas.addEventListener("touchmove", onTouchMove, { passive: true });
-    canvas.addEventListener("touchend", onTouchEnd, { passive: true });
-    canvas.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", onTouchEnd, { passive: false });
 
     return () => {
       canvas.removeEventListener("touchstart", onTouchStart);
@@ -784,9 +788,9 @@ const Canvas: React.FC<CanvasProps> = ({ sidebarWidth = 0 }) => {
         onWheel={handleWheel}
         style={{
           backgroundColor: canvasColor,
-          // Safari 修复：不使用 touchAction: none，让浏览器原生处理触摸
-          // 只在框选时通过动态 CSS 阻止滚动
-          touchAction: isBoxSelecting ? "none" : "pan-x pan-y",
+          // ====== 关键修复：固定为 none，完全由 JS 控制触摸 ======
+          // 这样画布上的触摸事件不会触发 Safari 的页面滑动/返回手势
+          touchAction: "none",
           userSelect: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",
