@@ -4,68 +4,28 @@ import { CardImage, Scene, PlacedCard } from "@/types";
 import { v4 as uuidv4 } from "uuid";
 import { get, set, del } from "idb-keyval";
 
-// ==================== 修复：直接使用 idb-keyval，不通过 createJSONStorage ====================
-// createJSONStorage 会做 JSON.stringify/parse，idb-keyval 也可能做序列化
-// 导致双重序列化问题。直接使用原始字符串存储。
-
+// ==================== idb-keyval 存储 ====================
 const idbStorage: StateStorage = {
-  getItem: async (name: string): Promise<string | null> => {
+  getItem: async (name) => {
     try {
       const value = await get(name);
-      console.log(
-        `[IDB] getItem("${name}")`,
-        typeof value,
-        value === null
-          ? "null"
-          : value === undefined
-            ? "undefined"
-            : `(${String(value).length} chars)`,
-      );
-
       if (value === undefined || value === null) return null;
-
-      // idb-keyval 可能返回字符串或对象
-      // 如果是对象，说明 idb-keyval 自动解析了 JSON
-      // 我们需要返回字符串，因为 zustand 的 persist 内部会解析
       if (typeof value === "string") return value;
-
-      // 如果是对象，重新序列化为字符串
       return JSON.stringify(value);
     } catch (e) {
       console.error("[IDB] getItem 失败:", e);
       return null;
     }
   },
-  setItem: async (name: string, value: string): Promise<void> => {
+  setItem: async (name, value) => {
     try {
-      console.log(
-        `[IDB] setItem("${name}")`,
-        typeof value,
-        `(${value.length} chars)`,
-      );
-
-      // value 已经是 JSON 字符串（由 zustand persist 内部序列化）
-      // 直接存储字符串
       await set(name, value);
-
-      // 验证写入
-      const verify = await get(name);
-      console.log(
-        `[IDB] 验证:`,
-        typeof verify,
-        verify === null
-          ? "null"
-          : verify === undefined
-            ? "undefined"
-            : `(${String(verify).length} chars)`,
-      );
     } catch (e) {
       console.error("[IDB] setItem 失败:", e);
     }
   },
-  removeItem: async (name: string): Promise<void> => {
+  removeItem: async (name) => {
     try {
-      console.log(`[IDB] removeItem("${name}")`);
       await del(name);
     } catch (e) {
       console.error("[IDB] removeItem 失败:", e);
@@ -87,27 +47,18 @@ export const checkStorage = async () => {
         );
         console.log("[Store] images 数量:", parsed.state?.images?.length || 0);
       } catch (e) {
-        console.log("[Store] 不是有效 JSON，前200字符:", value.slice(0, 200));
+        console.log("[Store] 不是有效 JSON");
       }
     } else if (value && typeof value === "object") {
-      console.log("[Store] 是对象，state 键:", Object.keys(value.state || {}));
-      console.log("[Store] images 数量:", value.state?.images?.length || 0);
+      console.log(
+        "[Store] 是对象，images 数量:",
+        value.state?.images?.length || 0,
+      );
     } else {
       console.log("[Store] 存储为空");
     }
   } catch (e) {
     console.error("[Store] 检查失败:", e);
-  }
-};
-
-export const exportStorage = async (): Promise<string | null> => {
-  try {
-    const value = await get("literacy-card-storage");
-    if (!value) return null;
-    return typeof value === "string" ? value : JSON.stringify(value);
-  } catch (e) {
-    console.error("[Store] 导出失败:", e);
-    return null;
   }
 };
 
@@ -596,9 +547,7 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: "literacy-card-storage",
-      // 关键修复：不使用 createJSONStorage，直接使用自定义 storage
-      // 因为 idb-keyval 已经处理序列化，不需要额外的 JSON 转换
-      storage: idbStorage,
+      storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({
         images: state.images,
         scenes: state.scenes,
