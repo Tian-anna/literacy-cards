@@ -64,11 +64,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // 🆕 显示模式：分页 / 全部
+  // 显示模式：分页 / 全部
   const [displayMode, setDisplayMode] = useState<"page" | "all">("page");
-  // 🆕 全部模式下已加载数量
+  // 全部模式下已加载数量
   const [loadedCount, setLoadedCount] = useState(0);
-  // 🆕 全部模式是否正在加载
+  // 全部模式是否正在加载
   const [isLoadingAll, setIsLoadingAll] = useState(false);
 
   const isResizingRef = useRef(false);
@@ -164,7 +164,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     return counts;
   }, [images, categories]);
 
-  // ✅ filteredImages useMemo 必须在使用它的 useEffect 之前定义
   const filteredImages = useMemo(() => {
     let result = [...images];
 
@@ -196,7 +195,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     return result;
   }, [images, selectedCategory, searchTerm, sortBy, sortOrder]);
 
-  // ✅ 懒加载 useEffect 放在 filteredImages 定义之后
+  // 懒加载 useEffect
   useEffect(() => {
     if (displayMode !== "all") {
       setLoadedCount(0);
@@ -225,7 +224,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     };
   }, [displayMode, filteredImages.length]);
 
-  // ✅ 滚动加载 useEffect 也放在 filteredImages 定义之后
+  // 滚动加载 useEffect
   useEffect(() => {
     if (displayMode !== "all") return;
 
@@ -245,7 +244,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     return () => container.removeEventListener("scroll", handleScroll);
   }, [displayMode, filteredImages.length]);
 
-  // 🆕 根据显示模式决定显示的图片列表
   const totalCount = filteredImages.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
 
@@ -270,7 +268,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setPage(1);
   };
 
-  // 🆕 切换显示模式
   const handleDisplayModeChange = (mode: "page" | "all") => {
     setDisplayMode(mode);
     setPage(1);
@@ -280,7 +277,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
-  // 🔄 同步云端图片：清理无效记录 + 同步到本地
   const handleSyncCloud = async () => {
     if (
       !confirm(
@@ -481,6 +477,29 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
+  // ==================== Safari 触摸滚动修复 ====================
+  // 阻止触摸事件冒泡到父级，确保滚动容器可以正常滚动
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    // 只在单指触摸时记录，允许默认滚动行为
+    if (e.touches.length === 1) {
+      // 不阻止默认行为，让 Safari 正常处理滚动
+      return;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    // 如果是单指滑动，不阻止默认行为，让 Safari 处理滚动
+    if (e.touches.length === 1) {
+      return;
+    }
+
+    // 多指操作（如缩放）时阻止默认行为
+    e.preventDefault();
+  }, []);
+
   return (
     <div className="h-full flex" style={{ fontSize: "12px" }}>
       <div
@@ -527,7 +546,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             </div>
 
-            {/* 🔄 同步云端按钮 */}
+            {/* 同步云端按钮 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <button
                 onClick={handleSyncCloud}
@@ -563,7 +582,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             )}
 
-            {/* 从云端同步按钮（旧功能保留） */}
+            {/* 从云端同步按钮 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <button
                 onClick={handleSyncFromCloud}
@@ -703,7 +722,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </button>
             </div>
 
-            {/* 🆕 显示模式切换 */}
+            {/* 显示模式切换 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <span className="text-gray-500">显示方式:</span>
@@ -732,7 +751,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   </button>
                 </div>
               </div>
-              {/* 🆕 全部模式加载进度 */}
               {displayMode === "all" && totalCount > 0 && (
                 <div className="mt-1.5">
                   <div className="flex items-center justify-between text-xs text-gray-500">
@@ -847,14 +865,22 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             )}
 
-            {/* 图片列表 */}
+            {/* 图片列表 - Safari 滚动修复 */}
             <div
               ref={scrollContainerRef}
               className="flex-1 overflow-y-auto p-2"
               style={{
                 WebkitOverflowScrolling: "touch",
                 overscrollBehavior: "contain",
+                // 关键修复：确保 Safari 可以正常滚动
+                touchAction: "pan-y",
+                WebkitTouchCallout: "none",
+                WebkitUserSelect: "none",
+                userSelect: "none",
               }}
+              // Safari 触摸事件处理
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
             >
               {totalCount === 0 ? (
                 <div className="text-center py-8 text-gray-400">
@@ -880,6 +906,8 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                             : "border-gray-200 hover:border-green-300"
                         }`}
                         onClick={() => handleImageClick(image.id)}
+                        // 阻止图片区域的触摸事件冒泡，避免与滚动冲突
+                        onTouchStart={(e) => e.stopPropagation()}
                       >
                         <div className="w-full h-full bg-gray-50 flex items-center justify-center">
                           {image.src ? (
@@ -943,7 +971,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     ))}
                   </div>
 
-                  {/* 🆕 全部模式：底部加载更多提示 */}
+                  {/* 全部模式：底部加载更多提示 */}
                   {displayMode === "all" &&
                     loadedCount < totalCount &&
                     !isLoadingAll && (
