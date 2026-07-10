@@ -4,60 +4,40 @@ import { CardImage, Scene, PlacedCard } from "@/types";
 import { v4 as uuidv4 } from "uuid";
 import { get, set, del, keys } from "idb-keyval";
 
-// ==================== Safari IndexedDB 兼容性检测 ====================
-let isIndexedDBAvailable = false;
-
-function checkIndexedDB(): Promise<boolean> {
-  return new Promise((resolve) => {
-    try {
-      if (typeof window === "undefined" || !window.indexedDB) {
-        resolve(false);
-        return;
-      }
-      const request = window.indexedDB.open("__test_db__", 1);
-      request.onsuccess = () => {
-        request.result.close();
-        window.indexedDB.deleteDatabase("__test_db__");
-        isIndexedDBAvailable = true;
-        resolve(true);
-      };
-      request.onerror = () => resolve(false);
-      request.onblocked = () => resolve(false);
-    } catch {
-      resolve(false);
-    }
-  });
-}
+// ==================== 增强版 IndexedDB 存储 ====================
 
 // 内存回退存储（用于无痕模式或 IndexedDB 不可用）
 let memoryFallback: Record<string, string> = {};
+let isIDBReady = false;
 
 const idbStorage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
     try {
-      if (!isIndexedDBAvailable) return memoryFallback[name] || null;
+      if (!isIDBReady) {
+        return memoryFallback[name] || null;
+      }
       const value = await get(name);
       return value ?? null;
     } catch (e) {
-      console.warn("[Store] IndexedDB 读取失败，使用内存回退:", e);
+      console.warn("[Store] IndexedDB 读取失败:", e);
       return memoryFallback[name] || null;
     }
   },
   setItem: async (name: string, value: string): Promise<void> => {
     try {
-      if (!isIndexedDBAvailable) {
+      if (!isIDBReady) {
         memoryFallback[name] = value;
         return;
       }
       await set(name, value);
     } catch (e) {
-      console.warn("[Store] IndexedDB 写入失败，使用内存回退:", e);
+      console.warn("[Store] IndexedDB 写入失败:", e);
       memoryFallback[name] = value;
     }
   },
   removeItem: async (name: string): Promise<void> => {
     try {
-      if (!isIndexedDBAvailable) {
+      if (!isIDBReady) {
         delete memoryFallback[name];
         return;
       }
@@ -149,7 +129,7 @@ interface StoreState {
   cleanInvalidImages: () => Promise<void>;
   cleanDuplicateImages: () => void;
 
-  // 持久化状态
+  // 持久化状态 - 必须在 partialize 中才能正确恢复
   _hasHydrated: boolean;
   setHasHydrated: (hasHydrated: boolean) => void;
 }
@@ -566,13 +546,14 @@ export const useStore = create<StoreState>()(
         });
       },
 
-      // 持久化 hydration 状态
+      // 持久化 hydration 状态 - 必须在 partialize 中
       _hasHydrated: false,
       setHasHydrated: (hasHydrated) => set({ _hasHydrated: hasHydrated }),
     }),
     {
       name: "literacy-card-storage",
       storage: createJSONStorage(() => idbStorage),
+      // 关键修复：_hasHydrated 必须在 partialize 中
       partialize: (state) => ({
         images: state.images,
         scenes: state.scenes,
@@ -582,27 +563,62 @@ export const useStore = create<StoreState>()(
         gridSize: state.gridSize,
         snapToGrid: state.snapToGrid,
         categories: state.categories,
+        _hasHydrated: state._hasHydrated, // 添加这行
       }),
-      // 移除自定义 serialize/deserialize，使用 zustand 默认的 JSON 序列化
-      // 因为 partialize 已经排除了 Set 类型的 selectedIds，无需自定义处理
+      // 关键修复：不使用 onRehydrateStorage 更新状态
+      // 因为 onRehydrateStorage 的 state 在首次 hydration 时为 undefined
+      // 改用 onFinishHydration 或手动检测
       onRehydrateStorage: () => (state, error) => {
         if (error) {
           console.error("[Store] 持久化恢复失败:", error);
-        } else {
+        } else if (state) {
           console.log(
             "[Store] 持久化恢复成功，图片数量:",
-            state?.images?.length || 0,
+            state.images?.length || 0,
           );
-          state?.setHasHydrated?.(true);
+        } else {
+          console.log("[Store] 持久化恢复: 无先前数据");
         }
       },
     },
   ),
 );
 
-// 初始化时检测 IndexedDB
+// 关键修复：初始化时检测 IndexedDB，但不阻塞 store 创建
 if (typeof window !== "undefined") {
-  checkIndexedDB().then((available) => {
-    console.log("[Store] IndexedDB 可用性:", available);
-  });
+  (async () => {
+    try {
+      if (window.indexedDB) {
+        const request = window.indexedDB.open("__test_db__", 1);
+        request.onsuccess = () => {
+          request.result.close();
+          window.indexedDB.deleteDatabase("__test_db__");
+          isIDBReady = true;
+          console.log("[Store] IndexedDB 已就绪");
+        };
+        request.onerror = () => {
+          console.warn("[Store] IndexedDB 不可用，使用内存回退");
+        };
+      }
+    } catch (e) {
+      console.warn("[Store] IndexedDB 检测失败:", e);
+    }
+  })();
+}
+
+// 关键修复：手动触发 rehydration 完成标记
+// 使用 persist 的 API 来正确设置 hydration 状态
+if (typeof window !== "undefined") {
+  // 延迟执行，确保 persist 中间件已经完成 hydration
+  setTimeout(() => {
+    const store = useStore.getState();
+    // 如果已经有数据，说明 hydration 成功
+    if (store.images.length > 0 || store.scenes.length > 0) {
+      store.setHasHydrated(true);
+      console.log("[Store] 检测到已有数据，hydration 完成");
+    } else {
+      store.setHasHydrated(true);
+      console.log("[Store] 无历史数据，hydration 完成");
+    }
+  }, 100);
 }

@@ -16,7 +16,6 @@ const StorageDebugger: React.FC = () => {
     lines.push(
       `IndexedDB: ${typeof window !== "undefined" && window.indexedDB ? "✅" : "❌"}`,
     );
-
     try {
       const testKey = "__safari_test__";
       localStorage.setItem(testKey, "1");
@@ -49,7 +48,6 @@ const StorageDebugger: React.FC = () => {
     refreshInfo();
   }, [refreshInfo]);
 
-  // Vite 标准写法，无类型问题
   if (import.meta.env.PROD) {
     return null;
   }
@@ -99,17 +97,35 @@ const App: React.FC = () => {
   const [sidebarWidth, setSidebarWidth] = useState(200);
   const [isReady, setIsReady] = useState(false);
 
+  // 等待持久化数据恢复完成
   useEffect(() => {
-    const unsubscribe = useStore.subscribe((state) => {
+    // 方案1：使用 zustand 的 persist 事件监听
+    const unsubscribe = useStore.persist.onFinishHydration(() => {
+      console.log("[App] hydration 完成");
+      setIsReady(true);
+    });
+
+    // 方案2：检测 _hasHydrated 状态变化
+    const unsubState = useStore.subscribe((state) => {
       if (state._hasHydrated) {
         setIsReady(true);
-        unsubscribe();
       }
     });
-    const timeout = setTimeout(() => setIsReady(true), 3000);
-    return () => clearTimeout(timeout);
+
+    // 方案3：超时兜底
+    const timeout = setTimeout(() => {
+      console.log("[App] hydration 超时，强制就绪");
+      setIsReady(true);
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      unsubState();
+      clearTimeout(timeout);
+    };
   }, []);
 
+  // 键盘快捷键
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const store = useStore.getState();
