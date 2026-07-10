@@ -2,49 +2,73 @@ import { create } from "zustand";
 import { persist, createJSONStorage, StateStorage } from "zustand/middleware";
 import { CardImage, Scene, PlacedCard } from "@/types";
 import { v4 as uuidv4 } from "uuid";
-import { get, set, del, keys } from "idb-keyval";
+import { get, set, del } from "idb-keyval";
 
-// ==================== 增强版 IndexedDB 存储 ====================
-
-// 内存回退存储（用于无痕模式或 IndexedDB 不可用）
-let memoryFallback: Record<string, string> = {};
-let isIDBReady = false;
+// ==================== 修复：直接使用 idb-keyval，不通过 createJSONStorage ====================
+// createJSONStorage 会做 JSON.stringify/parse，idb-keyval 也可能做序列化
+// 导致双重序列化问题。直接使用原始字符串存储。
 
 const idbStorage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
     try {
-      if (!isIDBReady) {
-        return memoryFallback[name] || null;
-      }
       const value = await get(name);
-      return value ?? null;
+      console.log(
+        `[IDB] getItem("${name}")`,
+        typeof value,
+        value === null
+          ? "null"
+          : value === undefined
+            ? "undefined"
+            : `(${String(value).length} chars)`,
+      );
+
+      if (value === undefined || value === null) return null;
+
+      // idb-keyval 可能返回字符串或对象
+      // 如果是对象，说明 idb-keyval 自动解析了 JSON
+      // 我们需要返回字符串，因为 zustand 的 persist 内部会解析
+      if (typeof value === "string") return value;
+
+      // 如果是对象，重新序列化为字符串
+      return JSON.stringify(value);
     } catch (e) {
-      console.warn("[Store] IndexedDB 读取失败:", e);
-      return memoryFallback[name] || null;
+      console.error("[IDB] getItem 失败:", e);
+      return null;
     }
   },
   setItem: async (name: string, value: string): Promise<void> => {
     try {
-      if (!isIDBReady) {
-        memoryFallback[name] = value;
-        return;
-      }
+      console.log(
+        `[IDB] setItem("${name}")`,
+        typeof value,
+        `(${value.length} chars)`,
+      );
+
+      // value 已经是 JSON 字符串（由 zustand persist 内部序列化）
+      // 直接存储字符串
       await set(name, value);
+
+      // 验证写入
+      const verify = await get(name);
+      console.log(
+        `[IDB] 验证:`,
+        typeof verify,
+        verify === null
+          ? "null"
+          : verify === undefined
+            ? "undefined"
+            : `(${String(verify).length} chars)`,
+      );
     } catch (e) {
-      console.warn("[Store] IndexedDB 写入失败:", e);
-      memoryFallback[name] = value;
+      console.error("[IDB] setItem 失败:", e);
     }
   },
   removeItem: async (name: string): Promise<void> => {
     try {
-      if (!isIDBReady) {
-        delete memoryFallback[name];
-        return;
-      }
+      console.log(`[IDB] removeItem("${name}")`);
       await del(name);
     } catch (e) {
-      console.warn("[Store] IndexedDB 删除失败:", e);
-      delete memoryFallback[name];
+      console.error("[IDB] removeItem 失败:", e);
     }
   },
 };
@@ -52,15 +76,38 @@ const idbStorage: StateStorage = {
 // 调试工具
 export const checkStorage = async () => {
   try {
-    const allKeys = await keys();
-    console.log("[Store] IndexedDB 所有键:", allKeys);
-    for (const key of allKeys) {
-      const value = await get(key);
-      const size = value ? JSON.stringify(value).length : 0;
-      console.log(`[Store] 键 "${key}": ${size} 字符`);
+    const value = await get("literacy-card-storage");
+    console.log("[Store] 原始存储内容:", typeof value);
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        console.log(
+          "[Store] 解析后 state 键:",
+          Object.keys(parsed.state || {}),
+        );
+        console.log("[Store] images 数量:", parsed.state?.images?.length || 0);
+      } catch (e) {
+        console.log("[Store] 不是有效 JSON，前200字符:", value.slice(0, 200));
+      }
+    } else if (value && typeof value === "object") {
+      console.log("[Store] 是对象，state 键:", Object.keys(value.state || {}));
+      console.log("[Store] images 数量:", value.state?.images?.length || 0);
+    } else {
+      console.log("[Store] 存储为空");
     }
   } catch (e) {
-    console.warn("[Store] 无法检查存储:", e);
+    console.error("[Store] 检查失败:", e);
+  }
+};
+
+export const exportStorage = async (): Promise<string | null> => {
+  try {
+    const value = await get("literacy-card-storage");
+    if (!value) return null;
+    return typeof value === "string" ? value : JSON.stringify(value);
+  } catch (e) {
+    console.error("[Store] 导出失败:", e);
+    return null;
   }
 };
 
@@ -129,7 +176,6 @@ interface StoreState {
   cleanInvalidImages: () => Promise<void>;
   cleanDuplicateImages: () => void;
 
-  // 持久化状态 - 必须在 partialize 中才能正确恢复
   _hasHydrated: boolean;
   setHasHydrated: (hasHydrated: boolean) => void;
 }
@@ -316,7 +362,6 @@ export const useStore = create<StoreState>()(
           ),
         })),
 
-      // 修复：移除随机偏移，固定位置
       addCardToScene: (imageId, x = 100, y = 100) => {
         let sceneId = get().currentSceneId;
         if (!sceneId) {
@@ -546,14 +591,14 @@ export const useStore = create<StoreState>()(
         });
       },
 
-      // 持久化 hydration 状态 - 必须在 partialize 中
       _hasHydrated: false,
       setHasHydrated: (hasHydrated) => set({ _hasHydrated: hasHydrated }),
     }),
     {
       name: "literacy-card-storage",
-      storage: createJSONStorage(() => idbStorage),
-      // 关键修复：_hasHydrated 必须在 partialize 中
+      // 关键修复：不使用 createJSONStorage，直接使用自定义 storage
+      // 因为 idb-keyval 已经处理序列化，不需要额外的 JSON 转换
+      storage: idbStorage,
       partialize: (state) => ({
         images: state.images,
         scenes: state.scenes,
@@ -563,11 +608,8 @@ export const useStore = create<StoreState>()(
         gridSize: state.gridSize,
         snapToGrid: state.snapToGrid,
         categories: state.categories,
-        _hasHydrated: state._hasHydrated, // 添加这行
+        _hasHydrated: state._hasHydrated,
       }),
-      // 关键修复：不使用 onRehydrateStorage 更新状态
-      // 因为 onRehydrateStorage 的 state 在首次 hydration 时为 undefined
-      // 改用 onFinishHydration 或手动检测
       onRehydrateStorage: () => (state, error) => {
         if (error) {
           console.error("[Store] 持久化恢复失败:", error);
@@ -584,41 +626,11 @@ export const useStore = create<StoreState>()(
   ),
 );
 
-// 关键修复：初始化时检测 IndexedDB，但不阻塞 store 创建
+// 延迟设置 hydration 完成
 if (typeof window !== "undefined") {
-  (async () => {
-    try {
-      if (window.indexedDB) {
-        const request = window.indexedDB.open("__test_db__", 1);
-        request.onsuccess = () => {
-          request.result.close();
-          window.indexedDB.deleteDatabase("__test_db__");
-          isIDBReady = true;
-          console.log("[Store] IndexedDB 已就绪");
-        };
-        request.onerror = () => {
-          console.warn("[Store] IndexedDB 不可用，使用内存回退");
-        };
-      }
-    } catch (e) {
-      console.warn("[Store] IndexedDB 检测失败:", e);
-    }
-  })();
-}
-
-// 关键修复：手动触发 rehydration 完成标记
-// 使用 persist 的 API 来正确设置 hydration 状态
-if (typeof window !== "undefined") {
-  // 延迟执行，确保 persist 中间件已经完成 hydration
   setTimeout(() => {
     const store = useStore.getState();
-    // 如果已经有数据，说明 hydration 成功
-    if (store.images.length > 0 || store.scenes.length > 0) {
-      store.setHasHydrated(true);
-      console.log("[Store] 检测到已有数据，hydration 完成");
-    } else {
-      store.setHasHydrated(true);
-      console.log("[Store] 无历史数据，hydration 完成");
-    }
-  }, 100);
+    store.setHasHydrated(true);
+    console.log("[Store] hydration 完成，当前图片:", store.images.length);
+  }, 500);
 }
