@@ -122,7 +122,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     };
 
     window.addEventListener("mousemove", handleMouseMove, { passive: false });
-    window.addEventListener("touchmove", handleTouchResizeStart, {
+    window.addEventListener("touchmove", handleTouchMove, {
       passive: false,
     });
     window.addEventListener("mouseup", handleEnd);
@@ -130,7 +130,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("touchmove", handleTouchResizeStart);
+      window.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("mouseup", handleEnd);
       window.removeEventListener("touchend", handleEnd);
     };
