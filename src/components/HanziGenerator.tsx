@@ -166,15 +166,16 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
           }
         }
 
+        // ==================== 修复：删除 id 和 createdAt ====================
         addImage({
-          id: tempId,
           src: finalSrc,
           name: chars[i],
           category: "汉字",
           width: CANVAS_WIDTH,
           height: CANVAS_HEIGHT,
-          createdAt: Date.now(),
         });
+        // ================================================================
+
         uploadedIds.push(tempId);
         setUploadProgress({ current: i + 1, total: chars.length });
         if (mode === "canvas" && chars.length === 1) onAddToCanvas?.(tempId);
@@ -237,7 +238,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
       {isExpanded && (
         <div className="px-3 pb-2 space-y-1.5">
-          {/* 输入框 - textarea 支持多行/自动换行 */}
+          {/* 输入框 */}
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -264,7 +265,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             ))}
           </div>
 
-          {/* 字号 + 字体 一行 */}
+          {/* 字号 + 字体 */}
           <div className="flex items-center gap-2">
             <span className="text-gray-500 text-xs whitespace-nowrap">
               字号
