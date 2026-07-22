@@ -109,7 +109,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       drawGrid(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, gridType);
 
       ctx.fillStyle = "#000000";
-      ctx.font = `bold ${fontSize}px ${fontFamily}`;
+      ctx.font = `${fontSize}px ${fontFamily}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(char, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
