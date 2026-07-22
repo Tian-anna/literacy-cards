@@ -341,13 +341,13 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
           }
         }
 
-        // 使用实际图片尺寸
+        // ========== 修复：英文单词正确分类 ==========
         addImage({
           src: finalSrc,
           name: content,
-          category: isHanzi ? "汉字" : "英文", // 英文用 "english"
-          width: isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH,
-          height: isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT,
+          category: isHanzi ? "汉字" : "英文",
+          width: imgWidth,
+          height: imgHeight,
         });
 
         uploadedIds.push(tempId);
@@ -411,7 +411,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       style={{ fontSize: "12px" }}
     >
       <div
-        className="flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-gray-50 flex-shrink-0"
+        className="flex items-center justify-between px-2 py-1 cursor-pointer hover:bg-gray-50 flex-shrink-0"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="font-medium text-gray-700 flex items-center gap-1">
@@ -422,11 +422,12 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       </div>
 
       {isExpanded && (
-        <div className="px-3 pb-2 space-y-1.5">
+        <div className="px-2 pb-1.5 space-y-1">
+          {/* ========== 修复：placeholder 显示中文提示 ========== */}
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder={isHanziMode ? "输入汉字..." : "输入英文单词..."}
+            placeholder="请输入汉字或英文单词"
             rows={1}
             className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500 resize-none"
             style={{ fontSize: "13px", minHeight: "28px", maxHeight: "60px" }}
@@ -444,7 +445,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
                 <button
                   key={gt.value}
                   onClick={() => setGridType(gt.value)}
-                  className={`py-1 rounded text-center text-xs border transition-all ${
+                  className={`py-0.5 rounded text-center text-xs border transition-all ${
                     gridType === gt.value
                       ? "bg-green-500 text-white border-green-500"
                       : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-green-50"
@@ -532,18 +533,19 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             </div>
           )}
 
-          <div className="flex gap-1.5">
+          {/* ========== 修复：按钮尺寸缩小 ========== */}
+          <div className="flex gap-1">
             <button
               onClick={() => handleCreate("library")}
               disabled={contents.length === 0 || isUploading}
-              className="flex-1 py-1.5 bg-blue-500 text-white rounded text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
+              className="flex-1 py-1 bg-blue-500 text-white rounded text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
             >
               {isUploading ? "..." : "加入图库"}
             </button>
             <button
               onClick={() => handleCreate("canvas")}
               disabled={contents.length === 0 || isUploading}
-              className="flex-1 py-1.5 bg-green-500 text-white rounded text-xs font-medium hover:bg-green-600 disabled:opacity-50"
+              className="flex-1 py-1 bg-green-500 text-white rounded text-xs font-medium hover:bg-green-600 disabled:opacity-50"
             >
               {isUploading
                 ? "..."

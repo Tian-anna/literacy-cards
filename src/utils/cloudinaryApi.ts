@@ -1,3 +1,136 @@
+
+新建会话
+Ctrl
+K
+我的 Kimi
+定时任务
+
+收起
+Kimi Work
+Kimi Code
+
+Kimi Claw
+
+对话
+查看全部
+云端同步文字问题
+
+Supabase刷新
+
+汉字拼图改造
+
+汉字生成+云存储
+
+新概念英语全套资料在哪里可以下载原版pdf
+
+alist挂载百度网盘
+
+免费个人云存储方案
+
+侧柏叶生发与米诺地尔
+
+山楂桂圆冬瓜姜汤功效
+
+门上被贴小广告，怎么清洗
+
+Safari图库滚动bug
+
+饿了么app消失
+
+Safari图库失效
+
+奶粉与牛奶区别
+
+夸克网盘的文件删除失败
+
+
+邀请有奖
+抢会员权益 - K3 可用
+
+云端同步文字问题
+8
+txt
+import React, { useS
+
+TXT
+17.85 KB
+txt
+import React, { useC
+
+TXT
+14.38 KB
+txt
+import React, { u
+
+TXT
+40.22 KB
+txt
+import React, { useS(1)
+
+TXT
+9.78 KB
+txt
+import { create } fr
+
+TXT
+17.57 KB
+txt
+srcutilscloudin
+
+TXT
+19.72 KB
+txt
+import React, { useE
+
+TXT
+5.72 KB
+云端同步的时间很长，英文单词还是存到汉字里面了，画布上显示的英文单词图片的尺寸还是不对。汉字生成器中的输入框文字 请输入汉字或英文单词 没有显示出来。同步云端，只显示了汉字的数量，没有英文的数量。清理无效记录并同步到本地，这段文字不用显示出来。整个界面的按钮框尺寸要小一点
+编辑
+复制
+分享
+我来帮你修复这些问题。让我先查看一下当前的代码文件，然后逐一修复。
+运行 Python 代码
+运行 Python 代码
+运行 Python 代码
+运行 Python 代码
+运行 Python 代码
+运行 Python 代码
+运行 Python 代码
+运行 Python 代码
+所有问题已修复完成，以下是修改摘要：
+修复内容
+1. ✅ 云端同步时间优化
+cloudinaryApi.ts: cleanInvalidCloudImages 改为批量并行检查（每次5张），大幅减少串行等待时间
+ImageLibrary.tsx: 同步时并行执行 cleanInvalidCloudImages + getCloudinaryImages，而不是串行
+2. ✅ 英文单词分类修复
+cloudinaryApi.ts: uploadHanziToCloudinary 新增检测逻辑：/^[a-zA-Z]+$/ 检测英文，设置 category = "英文"（汉字为 "汉字"）
+HanziGenerator.tsx: addImage 时传入正确的 category: isHanzi ? "汉字" : "英文"
+3. ✅ 画布英文单词尺寸修复
+DraggableCard.tsx: 鼠标拖拽和触摸事件中，边界计算都使用 aspect = img.width / img.height 比例，确保英文宽图（986×563）正确显示
+4. ✅ 输入框 placeholder 显示
+HanziGenerator.tsx: placeholder="请输入汉字或英文单词"（原来是动态根据中英文切换，现在固定显示中文提示）
+5. ✅ 云端同时显示汉字+英文数量
+ImageLibrary.tsx: 新增 englishCount 状态，云端信息区域同时显示「汉字: X 张」和「英文: X 张」
+6. ✅ 删除不需要的文字
+ImageLibrary.tsx: 移除了「清理无效记录并同步到本地」这段提示文字
+7. ✅ 整体按钮框缩小
+所有按钮统一缩小：px-3 → px-2，py-1.5 → py-1 或 py-0.5
+顶部栏：px-3 → px-2，py-2 → py-1.5
+控制按钮：w-6 h-6 → w-5 h-5
+拖拽手柄：width: 16px → 12px
+下载修复后的文件
+HanziGenerator.tsx
+DraggableCard.tsx
+ImageLibrary.tsx
+SceneManager.tsx
+cloudinaryApi.ts
+useStore.ts
+
+
+K2.6
+标准
+内容由AI生成，请仔细甄别
+cloudinaryApi.ts
 // src/utils/cloudinaryApi.ts
 
 import { supabase } from "./supabase";
@@ -116,11 +249,10 @@ export function checkImageAccessible(url: string): Promise<boolean> {
     const img = new Image();
     const timeout = setTimeout(() => {
       resolve(false);
-    }, 8000);
+    }, 5000);
 
     img.onload = () => {
       clearTimeout(timeout);
-      // 检查尺寸是否合理（排除 1x1 占位图）
       if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
         resolve(false);
         return;
@@ -133,13 +265,12 @@ export function checkImageAccessible(url: string): Promise<boolean> {
       resolve(false);
     };
 
-    // 关键修复：加时间戳绕过 CDN 缓存
     const separator = url.includes("?") ? "&" : "?";
     img.src = `${url}${separator}_nocache=${Date.now()}`;
   });
 }
 
-// ========== 数据库操作（带详细错误日志） ==========
+// ========== 数据库操作 ==========
 async function checkImageExists(
   fileName: string,
 ): Promise<{ url: string; public_id: string } | null> {
@@ -169,7 +300,6 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   const fileName = file.name.replace(/\.[^/.]+$/, "");
   logDebug("开始上传", fileName);
 
-  // 检查是否已存在
   const existing = await checkImageExists(fileName);
   if (existing) {
     const isAccessible = await checkImageAccessible(existing.url);
@@ -180,7 +310,6 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
     logDebug("图片存在但不可访问，重新上传");
   }
 
-  // 上传到 Cloudinary
   const formData = new FormData();
   formData.append("file", file);
   formData.append("upload_preset", UPLOAD_PRESET);
@@ -203,7 +332,6 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   const data = await res.json();
   logDebug("上传成功", data.secure_url);
 
-  // 保存到 Supabase
   if (existing) {
     const { error } = await supabase
       .from("cloud_images")
@@ -229,7 +357,7 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   return data.secure_url;
 }
 
-// ========== 汉字专用上传 ==========
+// ========== 汉字/英文专用上传 ==========
 export interface HanziStyleConfig {
   gridType: "tian" | "mi" | "plain";
   fontSize: number;
@@ -248,18 +376,22 @@ export async function uploadHanziToCloudinary(
   const publicId = `hanzi_${char}_${styleTag}_${timestamp}`;
   const file = dataUrlToFile(dataUrl, publicId);
 
-  // 检查是否已存在
+  // 检测是汉字还是英文，设置正确的分类
+  const isEnglish = /^[a-zA-Z]+$/.test(char);
+  const category = isEnglish ? "英文" : "汉字";
+
+  // 检查是否已存在（按分类检查）
   const { data: existing } = await supabase
     .from("cloud_images")
     .select("url, public_id")
     .eq("name", char)
-    .eq("category", "汉字")
+    .eq("category", category)
     .maybeSingle();
 
   if (existing) {
     const isAccessible = await checkImageAccessible(existing.url);
     if (isAccessible) {
-      logDebug("汉字图片已存在，直接复用", existing.url);
+      logDebug(`${category}图片已存在，直接复用`, existing.url);
       return existing.url;
     }
   }
@@ -269,7 +401,7 @@ export async function uploadHanziToCloudinary(
   formData.append("upload_preset", UPLOAD_PRESET);
   formData.append("folder", "literacy-cards/hanzi");
   formData.append("public_id", publicId);
-  formData.append("tags", `hanzi,${styleConfig.gridType},literacy`);
+  formData.append("tags", `${isEnglish ? 'english' : 'hanzi'},${styleConfig.gridType},literacy`);
 
   const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
 
@@ -280,7 +412,7 @@ export async function uploadHanziToCloudinary(
 
   if (!res.ok) {
     const error = await res.json();
-    logError("Cloudinary 汉字上传失败", error);
+    logError("Cloudinary 上传失败", error);
     logDebug("尝试降级到 GitHub 存储...");
     try {
       return await uploadImageToGitHub(file);
@@ -292,13 +424,13 @@ export async function uploadHanziToCloudinary(
   }
 
   const data = await res.json();
-  logDebug("汉字上传成功", data.secure_url);
+  logDebug("上传成功", data.secure_url);
 
   const { error } = await supabase.from("cloud_images").insert({
     name: char,
     url: data.secure_url,
     public_id: data.public_id,
-    category: "汉字",
+    category: category,
     metadata: {
       gridType: styleConfig.gridType,
       fontSize: styleConfig.fontSize,
@@ -309,13 +441,13 @@ export async function uploadHanziToCloudinary(
   });
 
   if (error) {
-    logError("Supabase 汉字插入错误", error);
+    logError("Supabase 插入错误", error);
   }
 
   return data.secure_url;
 }
 
-// ========== 获取图片列表（带详细错误处理） ==========
+// ========== 获取图片列表 ==========
 export async function getCloudinaryImages() {
   logDebug("开始获取云端图片列表");
 
@@ -340,7 +472,7 @@ export async function getCloudinaryImages() {
     return filtered;
   } catch (e) {
     logError("获取云端图片异常", e);
-    throw e; // 向上抛出，让调用方处理
+    throw e;
   }
 }
 
@@ -445,7 +577,7 @@ export async function rebuildCloudIndexFromLocal(
   return result;
 }
 
-// ========== 改进的计数接口（核心修复） ==========
+// ========== 改进的计数接口 ==========
 export interface CloudCountResult {
   count: number;
   error?: string;
@@ -455,7 +587,6 @@ export async function getCloudinaryImageCount(): Promise<CloudCountResult> {
   logDebug("开始查询云端图片数量");
 
   try {
-    // 先检查 supabase 是否初始化
     if (!supabase) {
       throw new Error("Supabase 客户端未初始化");
     }
@@ -479,7 +610,6 @@ export async function getCloudinaryImageCount(): Promise<CloudCountResult> {
     logError("查询数量时异常", e);
     const errorMsg = e instanceof Error ? e.message : "未知异常";
 
-    // 检测常见错误
     if (
       errorMsg.includes("Failed to fetch") ||
       errorMsg.includes("NetworkError")
@@ -640,18 +770,28 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     }
   }
 
-  // 检查用户上传图片
+  // 检查用户上传图片 - 使用批量并行检查加速
   const userImages = images.filter((img) => !isCloudinarySample(img.public_id));
   const invalidIds: number[] = [];
 
-  for (const img of userImages) {
-    result.checked++;
-    const isAccessible = await checkImageAccessible(img.url);
+  // 批量并行检查，每次5张
+  const BATCH_CHECK_SIZE = 5;
+  for (let i = 0; i < userImages.length; i += BATCH_CHECK_SIZE) {
+    const batch = userImages.slice(i, i + BATCH_CHECK_SIZE);
+    const results = await Promise.all(
+      batch.map(async (img) => {
+        const isAccessible = await checkImageAccessible(img.url);
+        return { img, isAccessible };
+      })
+    );
 
-    if (!isAccessible) {
-      invalidIds.push(img.id);
-      result.invalid++;
-      logDebug("发现无效图片", { name: img.name, url: img.url });
+    for (const { img, isAccessible } of results) {
+      result.checked++;
+      if (!isAccessible) {
+        invalidIds.push(img.id);
+        result.invalid++;
+        logDebug("发现无效图片", { name: img.name, url: img.url });
+      }
     }
   }
 

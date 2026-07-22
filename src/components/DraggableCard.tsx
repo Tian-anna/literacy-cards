@@ -46,7 +46,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     console.error("DraggableCard: 找不到图片", card.imageId);
     return null;
   }
-  // 根据图片实际宽高计算显示尺寸
+
+  // ========== 修复：根据图片实际宽高比例计算显示尺寸 ==========
   const baseWidth = image.width || 120;
   const baseHeight = image.height || 120;
   const aspectRatio = baseWidth / baseHeight;
@@ -143,11 +144,10 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         const store = useStore.getState();
         const c = store.placedCards.find((p) => p.instanceId === id);
         const img = images.find((img) => img.id === c?.imageId);
+        // ========== 修复：使用正确的宽高比例计算边界 ==========
         const aspect = img ? (img.width || 120) / (img.height || 120) : 1;
-        const cardW = img
-          ? (img.width / (img.height || 1)) * 120 * (c?.scale || 1)
-          : 120;
         const cardH = c ? 120 * (c.scale || 1) : 120;
+        const cardW = cardH * aspect;
 
         const clamped = clampPosition(newX, newY, cardW, cardH);
         newX = clamped.x;
@@ -274,8 +274,11 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
 
           const store = useStore.getState();
           const c = store.placedCards.find((p) => p.instanceId === id);
-          const cardW = c ? 120 * (c.scale || 1) : 120;
+          // ========== 修复：触摸事件也使用正确的宽高比例 ==========
+          const img = images.find((img) => img.id === c?.imageId);
+          const aspect = img ? (img.width || 120) / (img.height || 120) : 1;
           const cardH = c ? 120 * (c.scale || 1) : 120;
+          const cardW = cardH * aspect;
 
           const clamped = clampPosition(newX, newY, cardW, cardH);
           newX = clamped.x;
@@ -439,8 +442,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
-            className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-md border border-white"
-            style={{ fontSize: "12px" }}
+            className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-md border border-white"
+            style={{ fontSize: "10px" }}
             onClick={(e) => {
               e.stopPropagation();
               updateCard(card.instanceId, {
@@ -452,8 +455,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
             ↻
           </button>
           <button
-            className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md border border-white"
-            style={{ fontSize: "12px" }}
+            className="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md border border-white"
+            style={{ fontSize: "10px" }}
             onClick={(e) => {
               e.stopPropagation();
               const { removeCard } = useStore.getState();
