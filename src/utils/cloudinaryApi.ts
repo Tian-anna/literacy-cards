@@ -307,67 +307,42 @@ export async function uploadHanziToCloudinary(
 
 // ========== 获取图片列表 ==========
 
-// 带重试机制的查询函数（防止偶尔的网络波动导致失败）
-async function querySupabaseWithRetry<T>(
-  queryFn: () => Promise<{ data: T | null; error: any }>,
-  retries = 2,
-): Promise<T | null> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const { data, error } = await queryFn();
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.warn(`Supabase 查询失败 (重试 ${i + 1}/${retries}):`, error);
-      if (i === retries - 1) throw error;
-      // 等待 500ms 再重试
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-  }
-  return null;
-}
-
 export async function getCloudinaryImages() {
-  try {
-    const data = await querySupabaseWithRetry(() =>
-      supabase
-        .from("cloud_images")
-        .select("*")
-        .order("created_at", { ascending: false }),
-    );
+  const { data, error } = await supabase
+    .from("cloud_images")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-    if (!data) return [];
-
-    const filtered = filterOutSamples(data || []);
-
-    if ((data || []).length !== filtered.length) {
-      console.log(
-        `过滤了 ${(data || []).length - filtered.length} 张 Cloudinary 示例图片`,
-      );
-    }
-
-    return filtered;
-  } catch (error) {
-    console.error("getCloudinaryImages 最终失败:", error);
+  if (error) {
+    console.error("Get cloud images error:", error);
     return [];
   }
+
+  const filtered = filterOutSamples(data || []);
+
+  if ((data || []).length !== filtered.length) {
+    console.log(
+      `过滤了 ${(data || []).length - filtered.length} 张 Cloudinary 示例图片`,
+    );
+  }
+
+  return filtered;
 }
 
 /** 获取汉字图片列表（专用接口） */
 export async function getHanziImages() {
-  try {
-    const data = await querySupabaseWithRetry(() =>
-      supabase
-        .from("cloud_images")
-        .select("*")
-        .eq("category", "汉字")
-        .order("created_at", { ascending: false }),
-    );
-    return data || [];
-  } catch (error) {
-    console.error("getHanziImages 失败:", error);
+  const { data, error } = await supabase
+    .from("cloud_images")
+    .select("*")
+    .eq("category", "汉字")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Get hanzi images error:", error);
     return [];
   }
+
+  return data || [];
 }
 
 // ========== 云端索引修复 ==========
@@ -467,22 +442,17 @@ export interface CloudCountResult {
 }
 
 export async function getCloudinaryImageCount(): Promise<CloudCountResult> {
-  try {
-    const data = await querySupabaseWithRetry(() =>
-      supabase.from("cloud_images").select("public_id"),
-    );
+  const { data, error } = await supabase
+    .from("cloud_images")
+    .select("public_id");
 
-    if (!data) return { count: 0, error: "查询失败" };
-
-    const filtered = filterOutSamples(data || []);
-    return { count: filtered.length };
-  } catch (error) {
+  if (error) {
     console.error("Get cloud count error:", error);
-    return {
-      count: 0,
-      error: error instanceof Error ? error.message : "未知错误",
-    };
+    return { count: 0, error: error.message };
   }
+
+  const filtered = filterOutSamples(data || []);
+  return { count: filtered.length };
 }
 
 // ========== 删除（调用 Netlify Function） ==========
