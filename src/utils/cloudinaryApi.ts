@@ -106,7 +106,6 @@ export function filterOutSamples<T extends { public_id?: string }>(
   return images.filter((img) => !isCloudinarySample(img.public_id || ""));
 }
 
-// ========== 图片可访问性检查 ==========
 export function checkImageAccessible(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     if (!url || !url.startsWith("http")) {
@@ -117,10 +116,15 @@ export function checkImageAccessible(url: string): Promise<boolean> {
     const img = new Image();
     const timeout = setTimeout(() => {
       resolve(false);
-    }, 5000);
+    }, 8000);
 
     img.onload = () => {
       clearTimeout(timeout);
+      // 检查尺寸是否合理（排除 1x1 占位图）
+      if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
+        resolve(false);
+        return;
+      }
       resolve(true);
     };
 
@@ -129,7 +133,9 @@ export function checkImageAccessible(url: string): Promise<boolean> {
       resolve(false);
     };
 
-    img.src = url;
+    // 关键修复：加时间戳绕过 CDN 缓存
+    const separator = url.includes("?") ? "&" : "?";
+    img.src = `${url}${separator}_nocache=${Date.now()}`;
   });
 }
 
