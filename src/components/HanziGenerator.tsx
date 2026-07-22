@@ -11,17 +11,26 @@ interface HanziGeneratorProps {
 
 type GridType = "tian" | "mi" | "plain";
 
-interface HanziItem {
-  char: string;
-}
-
 const GRID_TYPES: { value: GridType; label: string }[] = [
   { value: "tian", label: "田字格" },
   { value: "mi", label: "米字格" },
   { value: "plain", label: "纯文字" },
 ];
 
-// 固定尺寸：493 x 563 像素 @ 300dpi
+const FONT_OPTIONS = [
+  {
+    value: '"Noto Serif SC", "Source Han Serif SC", "SimSun", "STSong", serif',
+    label: "宋体",
+  },
+  {
+    value:
+      '"Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif',
+    label: "黑体",
+  },
+  { value: '"Ma Shan Zheng", "ZCOOL XiaoWei", cursive', label: "楷体" },
+];
+
+// 固定尺寸
 const CANVAS_WIDTH = 493;
 const CANVAS_HEIGHT = 563;
 
@@ -30,6 +39,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
   const [inputText, setInputText] = useState("");
   const [gridType, setGridType] = useState<GridType>("tian");
   const [fontSize, setFontSize] = useState(280);
+  const [fontFamily, setFontFamily] = useState(FONT_OPTIONS[0].value);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadToCloud, setUploadToCloud] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -38,131 +48,86 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
   } | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
 
-  // 解析输入文本（提取汉字）
-  const parseInput = useCallback((text: string): HanziItem[] => {
-    const chars = text.split("").filter((c) => /[\u4e00-\u9fa5]/.test(c));
-    return chars.map((char) => ({ char }));
+  // 解析汉字
+  const parseInput = useCallback((text: string): string[] => {
+    return text.split("").filter((c) => /[\u4e00-\u9fa5]/.test(c));
   }, []);
 
-  // 绘制网格背景
+  // 绘制网格
   const drawGrid = useCallback(
-    (
-      ctx: CanvasRenderingContext2D,
-      width: number,
-      height: number,
-      type: GridType,
-    ) => {
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+    (ctx: CanvasRenderingContext2D, w: number, h: number, type: GridType) => {
+      ctx.strokeStyle = "rgba(0,0,0,0.12)";
       ctx.lineWidth = 1;
+      const hw = w / 2,
+        hh = h / 2;
 
-      const halfW = width / 2;
-      const halfH = height / 2;
-
-      switch (type) {
-        case "tian": // 田字格
-          // 外框
-          ctx.strokeRect(0, 0, width, height);
-          // 横中线
-          ctx.beginPath();
-          ctx.moveTo(0, halfH);
-          ctx.lineTo(width, halfH);
-          ctx.stroke();
-          // 竖中线
-          ctx.beginPath();
-          ctx.moveTo(halfW, 0);
-          ctx.lineTo(halfW, height);
-          ctx.stroke();
-          break;
-
-        case "mi": // 米字格
-          // 外框
-          ctx.strokeRect(0, 0, width, height);
-          // 横中线
-          ctx.beginPath();
-          ctx.moveTo(0, halfH);
-          ctx.lineTo(width, halfH);
-          ctx.stroke();
-          // 竖中线
-          ctx.beginPath();
-          ctx.moveTo(halfW, 0);
-          ctx.lineTo(halfW, height);
-          ctx.stroke();
-          // 对角线
-          ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.lineTo(width, height);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(width, 0);
-          ctx.lineTo(0, height);
-          ctx.stroke();
-          break;
-
-        case "plain": // 纯文字 - 无边框
-          break;
+      if (type === "tian") {
+        ctx.strokeRect(0, 0, w, h);
+        ctx.beginPath();
+        ctx.moveTo(0, hh);
+        ctx.lineTo(w, hh);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(hw, 0);
+        ctx.lineTo(hw, h);
+        ctx.stroke();
+      } else if (type === "mi") {
+        ctx.strokeRect(0, 0, w, h);
+        ctx.beginPath();
+        ctx.moveTo(0, hh);
+        ctx.lineTo(w, hh);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(hw, 0);
+        ctx.lineTo(hw, h);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(w, h);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(w, 0);
+        ctx.lineTo(0, h);
+        ctx.stroke();
       }
     },
     [],
   );
 
-  // 生成单张汉字图片（返回 DataURL）
+  // 生成图片
   const generateHanziImage = useCallback(
     (char: string): string | null => {
       if (!char) return null;
-
       const canvas = document.createElement("canvas");
       canvas.width = CANVAS_WIDTH;
       canvas.height = CANVAS_HEIGHT;
       const ctx = canvas.getContext("2d");
       if (!ctx) return null;
 
-      // 白底
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-      // 绘制网格
       drawGrid(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, gridType);
 
-      // 黑字
       ctx.fillStyle = "#000000";
-      ctx.font = `bold ${fontSize}px "Noto Serif SC", "Source Han Serif SC", "SimSun", "STSong", serif`;
+      ctx.font = `bold ${fontSize}px ${fontFamily}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-
-      // 文字阴影（极淡，增强可读性）
-      ctx.shadowColor = "rgba(0,0,0,0.05)";
-      ctx.shadowBlur = 1;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 1;
-
       ctx.fillText(char, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
 
-      // 重置阴影
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-
-      // 纯文字模式添加 subtle 边框
       if (gridType === "plain") {
-        ctx.strokeStyle = "rgba(0,0,0,0.06)";
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(0,0,0,0.05)";
         ctx.strokeRect(1, 1, CANVAS_WIDTH - 2, CANVAS_HEIGHT - 2);
       }
-
       return canvas.toDataURL("image/png", 1.0);
     },
-    [gridType, fontSize, drawGrid],
+    [gridType, fontSize, fontFamily, drawGrid],
   );
 
-  // 实时预览
   const previewUrl = useMemo(() => {
     const chars = parseInput(inputText);
-    if (chars.length === 0) return null;
-    return generateHanziImage(chars[0].char);
+    return chars.length > 0 ? generateHanziImage(chars[0]) : null;
   }, [inputText, generateHanziImage, parseInput]);
 
-  // 核心：生成 + 可选上传云端 + 加入图库/画布
   const handleCreate = useCallback(
     async (mode: "library" | "canvas") => {
       const chars = parseInput(inputText);
@@ -179,98 +144,69 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         fontSize,
         color: "#000000",
         bgColor: "#ffffff",
-        fontFamily:
-          '"Noto Serif SC", "Source Han Serif SC", "SimSun", "STSong", serif',
+        fontFamily,
       };
 
       const uploadedIds: string[] = [];
-
       for (let i = 0; i < chars.length; i++) {
-        const { char } = chars[i];
-        const dataUrl = generateHanziImage(char);
+        const dataUrl = generateHanziImage(chars[i]);
         if (!dataUrl) continue;
-
         const tempId = `hanzi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         let finalSrc = dataUrl;
 
-        // 上传到云端（汉字专用文件夹）
         if (uploadToCloud) {
           try {
             finalSrc = await uploadHanziToCloudinary(
               dataUrl,
-              char,
+              chars[i],
               styleConfig,
             );
-            console.log("汉字已上传到 Cloudinary (hanzi folder):", finalSrc);
           } catch (error) {
-            console.error("上传失败，使用本地 DataURL:", error);
-            alert(`"${char}" 云端上传失败，已保存为本地图片`);
+            alert(`"${chars[i]}" 云端上传失败，已保存本地`);
           }
         }
 
-        // 加入 store
-        const newImage = {
+        addImage({
           id: tempId,
           src: finalSrc,
-          name: char,
+          name: chars[i],
           category: "汉字",
           width: CANVAS_WIDTH,
           height: CANVAS_HEIGHT,
           createdAt: Date.now(),
-        };
-
-        addImage(newImage);
+        });
         uploadedIds.push(tempId);
-
         setUploadProgress({ current: i + 1, total: chars.length });
-
-        // 单字直接拼图
-        if (mode === "canvas" && chars.length === 1) {
-          onAddToCanvas?.(tempId);
-        }
+        if (mode === "canvas" && chars.length === 1) onAddToCanvas?.(tempId);
       }
 
       setIsUploading(false);
       setUploadProgress(null);
-
-      // 批量提示
       if (mode === "library") {
-        const cloudMsg = uploadToCloud ? "(已同步云端)" : "(仅本地)";
-        if (chars.length === 1) {
-          alert(`"${chars[0].char}" 已添加到图库！${cloudMsg}`);
-        } else {
-          alert(`${chars.length} 个汉字已批量添加到图库！${cloudMsg}`);
-        }
-      } else if (chars.length > 1) {
-        // 多字拼图模式：逐个添加到画布（错开位置）
-        const store = useStore.getState();
-        const canvasWidth = window.innerWidth - 300;
-        const canvasHeight = window.innerHeight - 150;
-        const cols = Math.ceil(Math.sqrt(chars.length));
-        const spacing = Math.max(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.4;
-        const startX = Math.max(50, (canvasWidth - cols * spacing) / 2);
-        const startY = Math.max(
-          50,
-          (canvasHeight - Math.ceil(chars.length / cols) * spacing) / 2,
+        alert(
+          `${chars.length} 个汉字已${uploadToCloud ? "同步云端" : "保存本地"}`,
         );
-
-        uploadedIds.forEach((id, index) => {
-          const col = index % cols;
-          const row = Math.floor(index / cols);
+      } else if (chars.length > 1) {
+        const store = useStore.getState();
+        const cols = Math.ceil(Math.sqrt(chars.length));
+        const gap = 160;
+        const startX = 100,
+          startY = 100;
+        uploadedIds.forEach((id, idx) =>
           store.addCardToScene(
             id,
-            startX + col * spacing,
-            startY + row * spacing,
-          );
-        });
+            startX + (idx % cols) * gap,
+            startY + Math.floor(idx / cols) * gap,
+          ),
+        );
       }
-
       setInputText("");
     },
     [
       inputText,
       gridType,
       fontSize,
+      fontFamily,
       uploadToCloud,
       generateHanziImage,
       parseInput,
@@ -280,121 +216,97 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
   );
 
   const chars = parseInput(inputText);
-  const previewScale = Math.min(1, 180 / CANVAS_WIDTH); // 预览最大宽度 180px
+  const previewScale = Math.min(1, 170 / CANVAS_WIDTH);
 
   return (
     <div
       className="bg-white border-b border-gray-200 flex flex-col"
-      style={{ fontSize: "12px", maxHeight: "60vh" }}
+      style={{ fontSize: "12px" }}
     >
-      {/* 标题栏 */}
+      {/* 标题 */}
       <div
-        className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-50 flex-shrink-0"
+        className="flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-gray-50 flex-shrink-0"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="font-medium text-gray-700 flex items-center gap-1.5">
-          <span className="text-base">✏️</span>
+        <div className="font-medium text-gray-700 flex items-center gap-1">
+          <span>✏️</span>
           <span>汉字生成器</span>
-          <span className="text-xs text-gray-400 font-normal">(493×563px)</span>
         </div>
-        <span className="text-gray-400">{isExpanded ? "▼" : "▶"}</span>
+        <span className="text-gray-400 text-xs">{isExpanded ? "▼" : "▶"}</span>
       </div>
 
       {isExpanded && (
-        <div
-          className="p-3 space-y-3 overflow-y-auto flex-1"
-          style={{
-            maxHeight: "calc(60vh - 40px)",
-            // Safari 滚动修复
-            WebkitOverflowScrolling: "touch",
-            overscrollBehavior: "contain",
-          }}
-        >
-          {/* 输入框 */}
-          <div className="space-y-1">
+        <div className="px-3 pb-2 space-y-1.5">
+          {/* 输入框 - textarea 支持多行/自动换行 */}
+          <textarea
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            placeholder="输入汉字..."
+            rows={1}
+            className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500 resize-none"
+            style={{ fontSize: "13px", minHeight: "28px", maxHeight: "60px" }}
+          />
+
+          {/* 格子类型 */}
+          <div className="grid grid-cols-3 gap-1">
+            {GRID_TYPES.map((gt) => (
+              <button
+                key={gt.value}
+                onClick={() => setGridType(gt.value)}
+                className={`py-1 rounded text-center text-xs border transition-all ${
+                  gridType === gt.value
+                    ? "bg-green-500 text-white border-green-500"
+                    : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-green-50"
+                }`}
+              >
+                {gt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 字号 + 字体 一行 */}
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500 text-xs whitespace-nowrap">
+              字号
+            </span>
             <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="输入汉字，如：山水火木土..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
-              style={{ fontSize: "14px" }}
-              maxLength={20}
+              type="range"
+              min="80"
+              max="400"
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value))}
+              className="flex-1 h-1 accent-green-500"
             />
-            {inputText && (
-              <p className="text-xs text-green-600">
-                将生成 {chars.length} 个汉字图片
-              </p>
-            )}
-          </div>
-
-          {/* 格子类型选择 */}
-          <div>
-            <label className="text-gray-500 text-xs mb-1.5 block">
-              格子类型
-            </label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {GRID_TYPES.map((gt) => (
-                <button
-                  key={gt.value}
-                  onClick={() => setGridType(gt.value)}
-                  className={`py-1.5 px-1 rounded-lg text-center transition-all border ${
-                    gridType === gt.value
-                      ? "bg-green-500 text-white border-green-500 font-medium"
-                      : "bg-gray-50 text-gray-600 border-gray-200 hover:border-green-300 hover:bg-green-50"
-                  }`}
-                >
-                  <div className="text-[10px]">{gt.label}</div>
-                </button>
+            <span className="text-xs w-8 text-right">{fontSize}</span>
+            <select
+              value={fontFamily}
+              onChange={(e) => setFontFamily(e.target.value)}
+              className="text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:border-green-500"
+            >
+              {FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
 
-          {/* 字号控制 */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-500 whitespace-nowrap text-xs">
-                字号:
-              </span>
-              <input
-                type="range"
-                min="80"
-                max="400"
-                value={fontSize}
-                onChange={(e) => setFontSize(Number(e.target.value))}
-                className="flex-1 h-1 accent-green-500"
-              />
-              <span className="w-10 text-right text-xs">{fontSize}</span>
-            </div>
-          </div>
-
-          {/* 固定信息 */}
-          <div className="flex items-center gap-3 text-xs text-gray-400">
-            <span>尺寸: 493×563px</span>
-            <span>300dpi</span>
-            <span>白底黑字</span>
-          </div>
-
-          {/* 上传到云端开关 */}
-          <label className="flex items-center gap-2 cursor-pointer bg-gray-50 rounded-lg px-2 py-1.5">
+          {/* 云端开关 */}
+          <label className="flex items-center gap-1.5 cursor-pointer">
             <input
               type="checkbox"
               checked={uploadToCloud}
               onChange={(e) => setUploadToCloud(e.target.checked)}
-              className="w-3 h-3 accent-green-500 rounded"
+              className="w-3 h-3 accent-green-500"
             />
-            <span className="text-gray-600 text-xs">
-              {uploadToCloud
-                ? "☁️ 同步到云端 literacy-cards/hanzi/（多端可用）"
-                : "💻 仅保存本地"}
-            </span>
+            <span className="text-gray-500 text-xs">☁️ 同步云端</span>
           </label>
 
-          {/* 实时预览 - 自适应缩放 */}
+          {/* 预览 */}
           {previewUrl && (
-            <div className="flex justify-center py-2">
+            <div className="flex justify-center">
               <div
-                className="border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-white"
+                className="border border-gray-200 rounded overflow-hidden bg-white"
                 style={{
                   width: `${CANVAS_WIDTH * previewScale}px`,
                   height: `${CANVAS_HEIGHT * previewScale}px`,
@@ -402,7 +314,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
               >
                 <img
                   src={previewUrl}
-                  alt="汉字预览"
+                  alt="预览"
                   className="w-full h-full object-contain"
                   style={{ imageRendering: "crisp-edges" }}
                 />
@@ -410,18 +322,17 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             </div>
           )}
 
-          {/* 上传进度 */}
+          {/* 进度 */}
           {uploadProgress && (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <span>上传进度</span>
+            <div className="space-y-0.5">
+              <div className="flex justify-between text-xs text-gray-500">
                 <span>
-                  {uploadProgress.current}/{uploadProgress.total}
+                  处理中 {uploadProgress.current}/{uploadProgress.total}
                 </span>
               </div>
-              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-green-500 transition-all duration-300"
+                  className="h-full bg-green-500 transition-all"
                   style={{
                     width: `${(uploadProgress.current / uploadProgress.total) * 100}%`,
                   }}
@@ -430,25 +341,21 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             </div>
           )}
 
-          {/* 操作按钮 */}
-          <div className="flex gap-2 pt-1 pb-1">
+          {/* 按钮 */}
+          <div className="flex gap-1.5">
             <button
               onClick={() => handleCreate("library")}
-              disabled={!inputText.trim() || isUploading}
-              className="flex-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs font-medium"
+              disabled={chars.length === 0 || isUploading}
+              className="flex-1 py-1.5 bg-blue-500 text-white rounded text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
             >
-              {isUploading ? "处理中..." : "加入图库"}
+              {isUploading ? "..." : "加入图库"}
             </button>
             <button
               onClick={() => handleCreate("canvas")}
-              disabled={!inputText.trim() || isUploading}
-              className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs font-medium"
+              disabled={chars.length === 0 || isUploading}
+              className="flex-1 py-1.5 bg-green-500 text-white rounded text-xs font-medium hover:bg-green-600 disabled:opacity-50"
             >
-              {isUploading
-                ? "处理中..."
-                : chars.length > 1
-                  ? "批量拼图"
-                  : "直接拼图"}
+              {isUploading ? "..." : chars.length > 1 ? "批量拼图" : "直接拼图"}
             </button>
           </div>
         </div>
