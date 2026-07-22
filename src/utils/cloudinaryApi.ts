@@ -7,7 +7,7 @@ const UPLOAD_PRESET = "literacy-cards";
 
 // Netlify Function URL
 const NETLIFY_API_URL =
-  "https://effervescent-kulfi-8283b0.netlify.app/.netlify/delete-cloudinary";
+  "https://effervescent-kulfi-8283b0.netlify.app/.netlify/functions/delete-cloudinary";
 
 // GitHub storage config
 const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
@@ -500,7 +500,7 @@ export async function getCloudinaryImageCount(): Promise<CloudCountResult> {
   }
 }
 
-// Delete
+// ========== 修复：删除 Cloudinary 图片（修复 CORS 问题）==========
 export async function deleteCloudImage(public_id: string): Promise<boolean> {
   if (isCloudinarySample(public_id)) {
     logDebug("无法删除示例图片", public_id);
@@ -510,22 +510,35 @@ export async function deleteCloudImage(public_id: string): Promise<boolean> {
   logDebug("删除云端图片", public_id);
 
   try {
+    // 使用 no-cors 模式或添加超时处理
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const backendRes = await fetch(NETLIFY_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ public_id }),
+      signal: controller.signal,
+      // 如果 Netlify Function 配置了 CORS，正常模式即可
+      // 如果没配置，需要改为 no-cors 但无法读取响应
     });
+
+    clearTimeout(timeoutId);
 
     if (!backendRes.ok) {
       const errorData = await backendRes.json().catch(() => ({}));
       logError("删除 Cloudinary 图片失败", errorData);
     } else {
-      logDebug("Cloudinary 图片删除成功");
+      const result = await backendRes.json().catch(() => ({}));
+      logDebug("Cloudinary 图片删除成功", result);
     }
   } catch (e) {
     logError("调用后端删除 API 失败", e);
+    // 即使 API 调用失败，也继续删除 Supabase 记录
+    logDebug("继续删除 Supabase 记录...");
   }
 
+  // 删除 Supabase 记录
   const { error } = await supabase
     .from("cloud_images")
     .delete()

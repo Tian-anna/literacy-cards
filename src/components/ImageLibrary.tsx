@@ -46,7 +46,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   } = useStore();
   const [isExpanded, setIsExpanded] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("全部");
+  const [selectedCategory, setSelectedCategory] = useState("汉字");
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<"name" | "date">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
@@ -58,7 +58,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [isRebuilding, setIsRebuilding] = useState(false);
   const [lastRebuildResult, setLastRebuildResult] =
     useState<RebuildResult | null>(null);
-  // ========== 修复：同时显示汉字和英文数量 ==========
   const [hanziCount, setHanziCount] = useState<number | null>(null);
   const [englishCount, setEnglishCount] = useState<number | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -89,10 +88,9 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       const result = await getCloudinaryImageCount();
       setCloudStatus(result);
       if (result.error) {
-        console.error("⚠️ 云端查询返回错误:", result.error);
+        console.error("云端查询返回错误:", result.error);
       }
 
-      // ========== 修复：同时获取汉字和英文数量 ==========
       const allCloudImages = await getCloudinaryImages();
       const hanzi = allCloudImages.filter(
         (img) => img.category === "汉字",
@@ -288,7 +286,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setLoadedCount(0);
   };
 
-  // ========== 修复：优化同步逻辑，减少等待时间 ==========
   const handleSyncCloud = async () => {
     if (!confirm("确定同步云端图片吗？\n\n这会检查云端图片并同步到本地图库"))
       return;
@@ -297,7 +294,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setLastSyncResult(null);
 
     try {
-      // 并行执行清理和获取
       const [cleanResult, cloudImages] = await Promise.all([
         cleanInvalidCloudImages(),
         getCloudinaryImages(),
@@ -307,7 +303,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       let addedCount = 0;
       let skippedCount = 0;
 
-      // 批量检查本地是否存在
       const existingSrcs = new Set(images.map((img) => img.src));
       const existingNames = new Set(images.map((img) => img.name));
 
@@ -557,7 +552,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   </div>
                 )}
 
-                {/* ========== 修复：同时显示汉字和英文数量 ========== */}
                 <div className="flex items-center justify-between mt-0.5">
                   <span className="text-gray-500 text-xs">汉字:</span>
                   <span className="text-orange-500 text-xs">
@@ -591,7 +585,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                     </>
                   )}
                 </button>
-                {/* ========== 修复：删除这段不需要的文字 ========== */}
               </div>
 
               {/* 同步结果提示 */}
@@ -602,7 +595,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 </div>
               )}
 
-              {/* 分类筛选 */}
+              {/* 分类筛选 - 只保留汉字和英文 */}
               <div className="px-2 py-1 border-b border-gray-100">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-gray-500">分类筛选</span>
@@ -643,19 +636,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   >
                     英文 ({categoryCounts["英文"] || 0})
                   </button>
-                  <button
-                    onClick={() => {
-                      setSelectedCategory("全部");
-                      setPage(1);
-                    }}
-                    className={`px-1.5 py-0.5 rounded text-xs ${
-                      selectedCategory === "全部"
-                        ? "bg-green-500 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    全部
-                  </button>
                 </div>
 
                 <select
@@ -667,7 +647,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500 bg-white text-xs"
                 >
                   {[
-                    "全部",
                     "汉字",
                     "英文",
                     ...categories.filter((c) => c !== "汉字" && c !== "英文"),

@@ -1,4 +1,5 @@
-import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+// netlify/delete-cloudinary.ts
+import type { Handler, HandlerEvent, HandlerContext } from "@netlify/types";
 import crypto from "crypto";
 
 function generateSHA1(input: string): string {
@@ -9,11 +10,12 @@ const handler: Handler = async (
   event: HandlerEvent,
   context: HandlerContext,
 ) => {
-  // CORS 头 - 允许 GitHub Pages 访问
+  // ========== 修复 1：CORS 头添加 Content-Type ==========
   const headers = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Content-Type": "application/json",
   };
 
   // 处理预检请求 (OPTIONS)
@@ -30,7 +32,19 @@ const handler: Handler = async (
     };
   }
 
-  const { public_id } = JSON.parse(event.body || "{}");
+  // ========== 修复 2：添加 JSON 解析错误处理 ==========
+  let body: any;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: "Invalid JSON body" }),
+    };
+  }
+
+  const { public_id } = body;
 
   if (!public_id) {
     return {
@@ -40,9 +54,24 @@ const handler: Handler = async (
     };
   }
 
-  const CLOUD_NAME = (process.env as any).CLOUDINARY_CLOUD_NAME;
-  const API_KEY = (process.env as any).CLOUDINARY_API_KEY;
-  const API_SECRET = (process.env as any).CLOUDINARY_API_SECRET;
+  // ========== 修复 3：添加示例图片保护 ==========
+  const lower = public_id.toLowerCase();
+  if (
+    lower === "sample" ||
+    lower.startsWith("sample/") ||
+    lower.startsWith("samples/") ||
+    lower.startsWith("cld-sample")
+  ) {
+    return {
+      statusCode: 403,
+      headers,
+      body: JSON.stringify({ error: "Cannot delete Cloudinary sample images" }),
+    };
+  }
+
+  const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+  const API_KEY = process.env.CLOUDINARY_API_KEY;
+  const API_SECRET = process.env.CLOUDINARY_API_SECRET;
 
   if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
     return {
@@ -75,24 +104,38 @@ const handler: Handler = async (
 
     const result = await cloudinaryRes.json();
 
-    if (result.result === "ok") {
+    // ========== 修复 4：处理 "not found" 情况（图片可能已被删除）==========
+    if (result.result === "ok" || result.result === "not found") {
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ success: true, message: "Image deleted" }),
+        body: JSON.stringify({
+          success: true,
+          message: "Image deleted",
+          result,
+          public_id,
+        }),
       };
     } else {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ success: false, error: result }),
+        body: JSON.stringify({
+          success: false,
+          error: result,
+          public_id,
+        }),
       };
     }
   } catch (error) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ success: false, error: String(error) }),
+      body: JSON.stringify({
+        success: false,
+        error: String(error),
+        public_id,
+      }),
     };
   }
 };
