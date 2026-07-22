@@ -86,11 +86,20 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     try {
       const result = await getCloudinaryImageCount();
       setCloudStatus(result);
+      // 如果有错误，在控制台详细显示
+      if (result.error) {
+        console.error("⚠️ 云端查询返回错误:", result.error);
+      }
+
       const hanzi = await getHanziImages().then((imgs) => imgs.length);
       setHanziCount(hanzi);
     } catch (error) {
       console.error("获取云端图片数量失败:", error);
-      setCloudStatus({ count: 0, error: "查询异常" });
+      // 显示真实错误信息
+      setCloudStatus({
+        count: 0,
+        error: error instanceof Error ? error.message : "未知异常",
+      });
       setHanziCount(null);
     } finally {
       setIsLoadingCloudCount(false);
