@@ -46,6 +46,14 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
     console.error("DraggableCard: 找不到图片", card.imageId);
     return null;
   }
+  // 根据图片实际宽高计算显示尺寸
+  const baseWidth = image.width || 120;
+  const baseHeight = image.height || 120;
+  const aspectRatio = baseWidth / baseHeight;
+
+  // 固定高度为 120，宽度按比例缩放
+  const displayHeight = 120 * card.scale;
+  const displayWidth = displayHeight * aspectRatio;
 
   const isSelected = selectedIds.has(card.instanceId);
 
@@ -134,7 +142,11 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
 
         const store = useStore.getState();
         const c = store.placedCards.find((p) => p.instanceId === id);
-        const cardW = c ? 120 * (c.scale || 1) : 120;
+        const img = images.find((img) => img.id === c?.imageId);
+        const aspect = img ? (img.width || 120) / (img.height || 120) : 1;
+        const cardW = img
+          ? (img.width / (img.height || 1)) * 120 * (c?.scale || 1)
+          : 120;
         const cardH = c ? 120 * (c.scale || 1) : 120;
 
         const clamped = clampPosition(newX, newY, cardW, cardH);
@@ -364,8 +376,8 @@ const DraggableCard: React.FC<DraggableCardProps> = ({
         {
           left: card.x,
           top: card.y,
-          width: 120 * card.scale,
-          height: 120 * card.scale,
+          width: displayWidth,
+          height: displayHeight,
           zIndex: card.zIndex,
           transform: `rotate(${card.rotation}deg)`,
           cursor: isDragging ? "grabbing" : "grab",

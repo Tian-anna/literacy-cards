@@ -635,6 +635,19 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   </button>
                   <button
                     onClick={() => {
+                      setSelectedCategory("英文");
+                      setPage(1);
+                    }}
+                    className={`px-2 py-0.5 rounded text-xs ${
+                      selectedCategory === "英文"
+                        ? "bg-blue-500 text-white"
+                        : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                    }`}
+                  >
+                    英文 ({categoryCounts["英文"] || 0})
+                  </button>
+                  <button
+                    onClick={() => {
                       setSelectedCategory("全部");
                       setPage(1);
                     }}
@@ -659,7 +672,8 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   {[
                     "全部",
                     "汉字",
-                    ...categories.filter((c) => c !== "汉字"),
+                    "英文", // ← 添加英文
+                    ...categories.filter((c) => c !== "汉字" && c !== "英文"),
                   ].map((cat) => (
                     <option key={cat} value={cat}>
                       {cat} ({categoryCounts[cat] || 0})

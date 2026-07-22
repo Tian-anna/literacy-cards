@@ -345,9 +345,9 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         addImage({
           src: finalSrc,
           name: content,
-          category: isHanzi ? "汉字" : "english", // 英文用 "english"
-          width: imgWidth,
-          height: imgHeight,
+          category: isHanzi ? "汉字" : "英文", // 英文用 "english"
+          width: isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH,
+          height: isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT,
         });
 
         uploadedIds.push(tempId);
