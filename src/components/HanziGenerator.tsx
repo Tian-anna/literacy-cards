@@ -18,7 +18,6 @@ const GRID_TYPES: { value: GridType; label: string }[] = [
   { value: "plain", label: "纯文字" },
 ];
 
-// 汉字字体
 const HANZI_FONTS = [
   {
     value: '"Noto Serif SC", "Source Han Serif SC", "SimSun", "STSong", serif',
@@ -32,7 +31,6 @@ const HANZI_FONTS = [
   { value: '"Ma Shan Zheng", "ZCOOL XiaoWei", cursive', label: "楷体" },
 ];
 
-// 英文字体
 const ENGLISH_FONTS = [
   { value: '"Times New Roman", Times, serif', label: "Times" },
   { value: '"Arial", "Helvetica", sans-serif', label: "Arial" },
@@ -41,13 +39,11 @@ const ENGLISH_FONTS = [
   { value: '"Comic Sans MS", cursive', label: "Comic" },
 ];
 
-// 尺寸配置
 const HANZI_WIDTH = 493;
 const HANZI_HEIGHT = 563;
-const ENGLISH_WIDTH = 986; // 汉字宽度的 2 倍
+const ENGLISH_WIDTH = 986;
 const ENGLISH_HEIGHT = 563;
 
-// 颜色配置
 const BORDER_COLOR = "#e74c3c";
 const GRID_COLOR = "#e74c3c";
 const GRID_LINE_WIDTH = 1;
@@ -70,37 +66,27 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
   } | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
 
-  // ========== 内容类型判断 ==========
   const detectContentType = useCallback((text: string): ContentType => {
-    // 去除空白后判断
     const trimmed = text.trim();
     if (!trimmed) return "hanzi";
-    // 如果包含任何汉字，视为汉字内容
     if (/[\u4e00-\u9fa5]/.test(trimmed)) return "hanzi";
-    // 否则视为英文（字母、数字、标点等）
     return "english";
   }, []);
 
-  // 解析输入内容
   const parseInput = useCallback(
     (text: string): string[] => {
       const trimmed = text.trim();
       if (!trimmed) return [];
-
       const type = detectContentType(trimmed);
-
       if (type === "hanzi") {
-        // 汉字：每个字符单独处理
         return trimmed.split("").filter((c) => /[\u4e00-\u9fa5]/.test(c));
       } else {
-        // 英文：按空格或逗号分词，每个词作为一个单元
         return trimmed.split(/[\s,，]+/).filter((w) => w.length > 0);
       }
     },
     [detectContentType],
   );
 
-  // 根据内容类型获取当前字体
   const getCurrentFontFamily = useCallback(
     (type: ContentType): string => {
       return type === "hanzi" ? hanziFontFamily : englishFontFamily;
@@ -108,14 +94,12 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     [hanziFontFamily, englishFontFamily],
   );
 
-  // ========== 绘制网格（红色虚线）==========
   const drawGrid = useCallback(
     (ctx: CanvasRenderingContext2D, w: number, h: number, type: GridType) => {
       ctx.save();
       ctx.strokeStyle = GRID_COLOR;
       ctx.lineWidth = GRID_LINE_WIDTH;
       ctx.setLineDash([8, 4]);
-
       const hw = w / 2,
         hh = h / 2;
 
@@ -146,13 +130,11 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         ctx.lineTo(0, h);
         ctx.stroke();
       }
-
       ctx.restore();
     },
     [],
   );
 
-  // ========== 绘制红色边框 ==========
   const drawBorder = useCallback(
     (ctx: CanvasRenderingContext2D, w: number, h: number) => {
       ctx.save();
@@ -165,7 +147,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     [],
   );
 
-  // ========== 绘制汉字 ==========
   const drawHanzi = useCallback(
     (
       ctx: CanvasRenderingContext2D,
@@ -175,26 +156,17 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       fontSize: number,
       fontFamily: string,
     ) => {
-      // 白色背景
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, w, h);
-
-      // 红色边框
       drawBorder(ctx, w, h);
-
-      // 内部网格（红色虚线）
       if (gridType !== "plain") {
         drawGrid(ctx, w, h, gridType);
       }
-
-      // 汉字（不加粗）
       ctx.fillStyle = "#000000";
       ctx.font = `${fontSize}px ${fontFamily}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(char, w / 2, h / 2);
-
-      // 纯文字模式淡色边框
       if (gridType === "plain") {
         ctx.save();
         ctx.strokeStyle = "rgba(231, 76, 60, 0.15)";
@@ -207,7 +179,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     [gridType, drawGrid, drawBorder],
   );
 
-  // ========== 绘制英文单词（四线三格）==========
+  // ========== 四线三格（颜色加深）==========
   const drawEnglish = useCallback(
     (
       ctx: CanvasRenderingContext2D,
@@ -217,58 +189,57 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       fontSize: number,
       fontFamily: string,
     ) => {
-      // 白色背景
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, w, h);
-
-      // 红色边框
       drawBorder(ctx, w, h);
 
-      // 四线三格配置
-      const lineColor = "rgba(231, 76, 60, 0.4)"; // 红色半透明
-      const lineWidth = 1;
-      const dashPattern = [6, 4]; // 虚线：6px 实线，4px 空白
+      // 四线三格 - 颜色加深
+      const lineColor = "rgba(231, 76, 60, 0.7)"; // 加深：0.4 → 0.7
+      const midLineColor = "rgba(231, 76, 60, 0.5)"; // 中线稍淡
+      const lineWidth = 1.5; // 加粗：1 → 1.5
+      const dashPattern = [6, 4];
 
-      // 计算四线位置（基于字体大小）
-      // 四线三格：顶线、中线、基线、降部线
-      const baseLineY = h * 0.65; // 基线（字母底部对齐线）
-      const xHeight = fontSize * 0.5; // x 高度（小写字母如 x 的高度）
-      const ascender = fontSize * 0.35; // 升部高度（b, d, h, k, l 等向上延伸）
-      const descender = fontSize * 0.25; // 降部深度（g, j, p, q, y 等向下延伸）
+      const baseLineY = h * 0.65;
+      const xHeight = fontSize * 0.5;
+      const ascender = fontSize * 0.35;
+      const descender = fontSize * 0.25;
 
-      const topLineY = baseLineY - xHeight - ascender; // 顶线
-      const midLineY = baseLineY - xHeight; // 中线（x 高度线）
-      const baseLine = baseLineY; // 基线
-      const descenderLineY = baseLineY + descender; // 降部线
+      const topLineY = baseLineY - xHeight - ascender;
+      const midLineY = baseLineY - xHeight;
+      const baseLine = baseLineY;
+      const descenderLineY = baseLineY + descender;
 
       ctx.save();
-      ctx.strokeStyle = lineColor;
       ctx.lineWidth = lineWidth;
-      ctx.setLineDash(dashPattern);
 
-      // 顶线（升部顶部）
+      // 顶线 - 虚线
+      ctx.strokeStyle = lineColor;
+      ctx.setLineDash(dashPattern);
       ctx.beginPath();
       ctx.moveTo(0, topLineY);
       ctx.lineTo(w, topLineY);
       ctx.stroke();
 
-      // 中线（x 高度）
+      // 中线 - 虚线（稍淡）
+      ctx.strokeStyle = midLineColor;
       ctx.beginPath();
       ctx.moveTo(0, midLineY);
       ctx.lineTo(w, midLineY);
       ctx.stroke();
 
-      // 基线（实线，稍明显一些）
-      ctx.setLineDash([]); // 基线用实线
-      ctx.strokeStyle = "rgba(231, 76, 60, 0.6)";
+      // 基线 - 实线（最粗最明显）
+      ctx.setLineDash([]);
+      ctx.strokeStyle = "rgba(231, 76, 60, 0.85)"; // 最深
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(0, baseLine);
       ctx.lineTo(w, baseLine);
       ctx.stroke();
 
-      // 降部线
-      ctx.setLineDash(dashPattern);
+      // 降部线 - 虚线
+      ctx.lineWidth = lineWidth;
       ctx.strokeStyle = lineColor;
+      ctx.setLineDash(dashPattern);
       ctx.beginPath();
       ctx.moveTo(0, descenderLineY);
       ctx.lineTo(w, descenderLineY);
@@ -276,21 +247,19 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
       ctx.restore();
 
-      // 英文单词（不加粗）
+      // 英文单词
       ctx.fillStyle = "#000000";
       ctx.font = `${fontSize}px ${fontFamily}`;
       ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic"; // 使用 alphabetic 基线对齐
+      ctx.textBaseline = "alphabetic";
       ctx.fillText(word, w / 2, baseLine);
     },
     [drawBorder],
   );
 
-  // ========== 生成图片（统一入口）==========
   const generateImage = useCallback(
     (content: string, type: ContentType): string | null => {
       if (!content) return null;
-
       const isHanzi = type === "hanzi";
       const w = isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH;
       const h = isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT;
@@ -302,27 +271,22 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       if (!ctx) return null;
 
       const fontFamily = getCurrentFontFamily(type);
-
       if (isHanzi) {
         drawHanzi(ctx, content, w, h, fontSize, fontFamily);
       } else {
         drawEnglish(ctx, content, w, h, fontSize, fontFamily);
       }
-
       return canvas.toDataURL("image/png", 1.0);
     },
     [fontSize, getCurrentFontFamily, drawHanzi, drawEnglish],
   );
 
-  // ========== 预览 ==========
   const previewInfo = useMemo(() => {
     const contents = parseInput(inputText);
     if (contents.length === 0) return null;
-
     const firstContent = contents[0];
     const type = detectContentType(inputText);
     const dataUrl = generateImage(firstContent, type);
-
     return {
       content: firstContent,
       type,
@@ -332,7 +296,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     };
   }, [inputText, parseInput, detectContentType, generateImage]);
 
-  // ========== 创建处理 ==========
   const handleCreate = useCallback(
     async (mode: "library" | "canvas") => {
       const contents = parseInput(inputText);
@@ -343,6 +306,8 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
       const contentType = detectContentType(inputText);
       const isHanzi = contentType === "hanzi";
+      const imgWidth = isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH;
+      const imgHeight = isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT;
 
       setIsUploading(true);
       setUploadProgress({ current: 0, total: contents.length });
@@ -366,7 +331,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
         if (uploadToCloud) {
           try {
-            // 英文单词也用同一个上传函数，但标记不同
             finalSrc = await uploadHanziToCloudinary(
               dataUrl,
               content,
@@ -377,12 +341,13 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
           }
         }
 
+        // 使用实际图片尺寸
         addImage({
           src: finalSrc,
           name: content,
-          category: isHanzi ? "汉字" : "英文",
-          width: isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH,
-          height: isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT,
+          category: isHanzi ? "汉字" : "english", // 英文用 "english"
+          width: imgWidth,
+          height: imgHeight,
         });
 
         uploadedIds.push(tempId);
@@ -400,7 +365,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       } else if (contents.length > 1) {
         const store = useStore.getState();
         const cols = Math.ceil(Math.sqrt(contents.length));
-        const gap = isHanzi ? 160 : 320; // 英文单词间距更大
+        const gap = isHanzi ? 160 : 320;
         const startX = 100,
           startY = 100;
         uploadedIds.forEach((id, idx) =>
@@ -428,15 +393,12 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     ],
   );
 
-  // 判断当前内容类型用于 UI 显示
   const currentType = useMemo(
     () => detectContentType(inputText),
     [inputText, detectContentType],
   );
   const isHanziMode = currentType === "hanzi";
   const contents = parseInput(inputText);
-
-  // 预览缩放比例
   const previewScale = useMemo(() => {
     if (!previewInfo) return 1;
     const maxPreviewWidth = 170;
@@ -448,7 +410,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       className="bg-white border-b border-gray-200 flex flex-col"
       style={{ fontSize: "12px" }}
     >
-      {/* 标题 */}
       <div
         className="flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-gray-50 flex-shrink-0"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -462,7 +423,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
       {isExpanded && (
         <div className="px-3 pb-2 space-y-1.5">
-          {/* 输入框 */}
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -472,14 +432,12 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             style={{ fontSize: "13px", minHeight: "28px", maxHeight: "60px" }}
           />
 
-          {/* 内容类型提示 */}
           {inputText && (
             <div className="text-xs text-gray-500">
               检测到: {isHanziMode ? "汉字" : "英文"} ({contents.length} 个)
             </div>
           )}
 
-          {/* 格子类型 - 仅汉字模式显示 */}
           {isHanziMode && (
             <div className="grid grid-cols-3 gap-1">
               {GRID_TYPES.map((gt) => (
@@ -498,7 +456,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             </div>
           )}
 
-          {/* 字号 + 字体 */}
           <div className="flex items-center gap-2">
             <span className="text-gray-500 text-xs whitespace-nowrap">
               字号
@@ -512,16 +469,11 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
               className="flex-1 h-1 accent-green-500"
             />
             <span className="text-xs w-8 text-right">{fontSize}</span>
-
-            {/* 字体选择 - 根据内容类型切换 */}
             <select
               value={isHanziMode ? hanziFontFamily : englishFontFamily}
               onChange={(e) => {
-                if (isHanziMode) {
-                  setHanziFontFamily(e.target.value);
-                } else {
-                  setEnglishFontFamily(e.target.value);
-                }
+                if (isHanziMode) setHanziFontFamily(e.target.value);
+                else setEnglishFontFamily(e.target.value);
               }}
               className="text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:border-green-500"
             >
@@ -533,7 +485,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             </select>
           </div>
 
-          {/* 云端开关 */}
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input
               type="checkbox"
@@ -544,7 +495,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             <span className="text-gray-500 text-xs">☁️ 同步云端</span>
           </label>
 
-          {/* 预览 */}
           {previewInfo?.dataUrl && (
             <div className="flex justify-center">
               <div
@@ -564,7 +514,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             </div>
           )}
 
-          {/* 进度 */}
           {uploadProgress && (
             <div className="space-y-0.5">
               <div className="flex justify-between text-xs text-gray-500">
@@ -583,7 +532,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             </div>
           )}
 
-          {/* 按钮 */}
           <div className="flex gap-1.5">
             <button
               onClick={() => handleCreate("library")}
