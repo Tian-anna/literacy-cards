@@ -14,6 +14,7 @@ import {
   clearAllCloudImages,
   cleanInvalidCloudImages,
   CleanResult,
+  RebuildResult, // ← 添加这行导入
 } from "@/utils/cloudinaryApi";
 import HanziGenerator from "./HanziGenerator";
 
@@ -49,9 +50,15 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<"name" | "date">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [cloudCount, setCloudCount] = useState<number | null>(null);
-  const [hanziCount, setHanziCount] = useState<number | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<{
+    count: number;
+    error?: string;
+  } | null>(null);
   const [isLoadingCloudCount, setIsLoadingCloudCount] = useState(false);
+  const [isRebuilding, setIsRebuilding] = useState(false);
+  const [lastRebuildResult, setLastRebuildResult] =
+    useState<RebuildResult | null>(null);
+  const [hanziCount, setHanziCount] = useState<number | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
@@ -77,15 +84,13 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const fetchCloudCount = useCallback(async () => {
     setIsLoadingCloudCount(true);
     try {
-      const [count, hanzi] = await Promise.all([
-        getCloudinaryImageCount(),
-        getHanziImages().then((imgs) => imgs.length),
-      ]);
-      setCloudCount(count);
+      const result = await getCloudinaryImageCount();
+      setCloudStatus(result);
+      const hanzi = await getHanziImages().then((imgs) => imgs.length);
       setHanziCount(hanzi);
     } catch (error) {
       console.error("获取云端图片数量失败:", error);
-      setCloudCount(null);
+      setCloudStatus({ count: 0, error: "查询异常" });
       setHanziCount(null);
     } finally {
       setIsLoadingCloudCount(false);
@@ -336,6 +341,42 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
+  const handleRebuildIndex = async () => {
+    if (
+      !confirm(
+        "确定修复云端索引吗？\n\n这会扫描本地图库中的所有图片，发现 Cloudinary URL 但 Supabase 中没有记录的图片，自动补录到云端索引。\n\n注意：这不会重新上传图片，只是补录数据库记录。",
+      )
+    )
+      return;
+
+    setIsRebuilding(true);
+    setLastRebuildResult(null);
+
+    try {
+      const { rebuildCloudIndexFromLocal } =
+        await import("@/utils/cloudinaryApi");
+      const result = await rebuildCloudIndexFromLocal(images);
+      setLastRebuildResult(result);
+
+      await fetchCloudCount();
+
+      const messages = ["索引修复完成！"];
+      messages.push(`扫描本地: ${result.scanned} 张`);
+      messages.push(`Cloudinary URL: ${result.cloudUrls} 张`);
+      messages.push(`补录记录: ${result.added} 条`);
+      messages.push(`已存在: ${result.skipped} 条`);
+      if (result.errors.length > 0) {
+        messages.push(`错误: ${result.errors.length} 个`);
+      }
+      alert(messages.join("\n"));
+    } catch (error) {
+      console.error("修复索引失败:", error);
+      alert("修复失败: " + (error as Error).message);
+    } finally {
+      setIsRebuilding(false);
+    }
+  };
+
   const handleImageClick = (imageId: string) => {
     if (isBatchMode) {
       setSelectedImages((prev) => {
@@ -457,27 +498,65 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   <span>云端:</span>
                   <div className="flex items-center gap-2">
                     {isLoadingCloudCount ? (
-                      <span className="animate-pulse">加载中...</span>
-                    ) : cloudCount !== null ? (
-                      <span className="text-green-600">{cloudCount} 张</span>
+                      <span className="animate-pulse text-xs">加载中...</span>
+                    ) : cloudStatus ? (
+                      <>
+                        {cloudStatus.error ? (
+                          <span
+                            className="text-red-400 text-xs"
+                            title={cloudStatus.error}
+                          >
+                            查询失败
+                          </span>
+                        ) : (
+                          <span className="text-green-600 text-xs">
+                            {cloudStatus.count} 张
+                          </span>
+                        )}
+                        {cloudStatus.count === 0 &&
+                          !cloudStatus.error &&
+                          images.length > 0 && (
+                            <button
+                              onClick={handleRebuildIndex}
+                              disabled={isRebuilding}
+                              className="px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded hover:bg-orange-200 text-xs"
+                              title="从本地图库反向重建云端索引"
+                            >
+                              {isRebuilding ? "修复中..." : "修复索引"}
+                            </button>
+                          )}
+                        {cloudStatus.count > 0 && (
+                          <button
+                            onClick={handleClearAllCloud}
+                            className="px-1.5 py-0.5 bg-red-100 text-red-500 rounded hover:bg-red-200 text-xs"
+                            title="清空云端（保留示例图）"
+                          >
+                            清空
+                          </button>
+                        )}
+                      </>
                     ) : (
-                      <span className="text-red-400">获取失败</span>
-                    )}
-                    {cloudCount !== null && cloudCount > 0 && (
-                      <button
-                        onClick={handleClearAllCloud}
-                        className="px-1.5 py-0.5 bg-red-100 text-red-500 rounded hover:bg-red-200 text-xs"
-                        title="清空云端（保留示例图）"
-                      >
-                        清空
-                      </button>
+                      <span className="text-gray-400 text-xs">--</span>
                     )}
                   </div>
                 </div>
+
+                {/* 修复结果提示 */}
+                {lastRebuildResult && (
+                  <div className="mt-1 text-xs text-orange-600 bg-orange-50 rounded px-1.5 py-0.5">
+                    修复: 扫描 {lastRebuildResult.scanned} 张, 补录{" "}
+                    {lastRebuildResult.added} 条
+                    {lastRebuildResult.errors.length > 0 &&
+                      `, 错误 ${lastRebuildResult.errors.length} 个`}
+                  </div>
+                )}
+
                 {hanziCount !== null && hanziCount > 0 && (
                   <div className="flex items-center justify-between text-gray-500 mt-0.5">
                     <span>汉字:</span>
-                    <span className="text-orange-500">{hanziCount} 张</span>
+                    <span className="text-orange-500 text-xs">
+                      {hanziCount} 张
+                    </span>
                   </div>
                 )}
               </div>

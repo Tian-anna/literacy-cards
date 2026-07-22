@@ -5,7 +5,7 @@ const UPLOAD_PRESET = "literacy-cards";
 
 // Netlify Function 完整 URL
 const NETLIFY_API_URL =
-  "https://effervescent-kulfi-8283b0.netlify.app/.netlify/functions/delete-cloudinary";
+  "https://effervescent-kulfi-8283b0.netlify.app/.netlify/delete-cloudinary";
 
 // ========== GitHub 存储配置（备选方案） ==========
 const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
@@ -216,19 +216,15 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
 // ========== 汉字专用上传（隔离存储 + 多端一致性保证） ==========
 
 export interface HanziStyleConfig {
-  gridType: "tian" | "mi" | "huigong" | "pinyin" | "plain"; // 田字格/米字格/回宫格/拼音格/纯文字
+  gridType: "tian" | "mi" | "plain";
   fontSize: number;
   color: string;
   bgColor: string;
   fontFamily: string;
-  showStrokeOrder?: boolean; // 未来扩展：笔顺
-  showPinyin?: boolean; // 拼音格专用
-  pinyinText?: string; // 拼音内容
 }
 
 /**
  * 上传汉字图片到 Cloudinary（专用文件夹隔离）
- * 使用 public_id 包含样式信息，确保多端渲染一致
  */
 export async function uploadHanziToCloudinary(
   dataUrl: string,
@@ -236,7 +232,6 @@ export async function uploadHanziToCloudinary(
   styleConfig: HanziStyleConfig,
 ): Promise<string> {
   const timestamp = Date.now();
-  // public_id 包含汉字和样式摘要，便于管理和识别
   const styleTag = `${styleConfig.gridType}_${styleConfig.fontSize}`;
   const publicId = `hanzi_${char}_${styleTag}_${timestamp}`;
 
@@ -261,10 +256,8 @@ export async function uploadHanziToCloudinary(
   const formData = new FormData();
   formData.append("file", file);
   formData.append("upload_preset", UPLOAD_PRESET);
-  // 关键：汉字图片单独存放到 literacy-cards/hanzi/ 文件夹
   formData.append("folder", "literacy-cards/hanzi");
   formData.append("public_id", publicId);
-  // 添加标签便于分类管理
   formData.append("tags", `hanzi,${styleConfig.gridType},literacy`);
 
   const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
@@ -277,7 +270,6 @@ export async function uploadHanziToCloudinary(
   if (!res.ok) {
     const error = await res.json();
     console.error("Cloudinary hanzi upload error:", error);
-    // 降级到 GitHub
     console.log("尝试降级到 GitHub 存储...");
     try {
       return await uploadImageToGitHub(file);
@@ -337,20 +329,6 @@ export async function getCloudinaryImages() {
   return filtered;
 }
 
-export async function getCloudinaryImageCount(): Promise<number> {
-  const { data, error } = await supabase
-    .from("cloud_images")
-    .select("public_id");
-
-  if (error) {
-    console.error("Get cloud count error:", error);
-    return 0;
-  }
-
-  const filtered = filterOutSamples(data || []);
-  return filtered.length;
-}
-
 /** 获取汉字图片列表（专用接口） */
 export async function getHanziImages() {
   const { data, error } = await supabase
@@ -365,6 +343,116 @@ export async function getHanziImages() {
   }
 
   return data || [];
+}
+
+// ========== 云端索引修复 ==========
+
+export interface RebuildResult {
+  scanned: number;
+  cloudUrls: number;
+  added: number;
+  skipped: number;
+  errors: string[];
+}
+
+/**
+ * 从本地图库反向重建云端索引
+ * 遍历本地图片，发现 Cloudinary URL 但 Supabase 无记录时自动补录
+ */
+export async function rebuildCloudIndexFromLocal(
+  localImages: { src: string; name: string; category?: string }[],
+): Promise<RebuildResult> {
+  const result: RebuildResult = {
+    scanned: localImages.length,
+    cloudUrls: 0,
+    added: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  for (const img of localImages) {
+    // 只处理 Cloudinary URL
+    if (!img.src || !img.src.includes("res.cloudinary.com")) continue;
+    result.cloudUrls++;
+
+    // 尝试提取 public_id
+    let publicId: string | null = null;
+    try {
+      const url = new URL(img.src);
+      const pathParts = url.pathname.split("/");
+      const uploadIndex = pathParts.indexOf("upload");
+      if (uploadIndex !== -1 && uploadIndex + 1 < pathParts.length) {
+        let startIdx = uploadIndex + 1;
+        if (pathParts[startIdx]?.startsWith("v")) {
+          startIdx++;
+        }
+        const filePart = pathParts.slice(startIdx).join("/");
+        publicId = filePart.replace(/\.[^/.]+$/, "");
+      }
+    } catch {
+      result.errors.push(`URL 解析失败: ${img.name}`);
+      continue;
+    }
+
+    if (!publicId) {
+      result.errors.push(`无法提取 public_id: ${img.name}`);
+      continue;
+    }
+
+    // 检查是否已存在
+    const { data: existing } = await supabase
+      .from("cloud_images")
+      .select("id")
+      .eq("public_id", publicId)
+      .maybeSingle();
+
+    if (existing) {
+      result.skipped++;
+      continue;
+    }
+
+    // 插入记录
+    const { error } = await supabase.from("cloud_images").insert({
+      name: img.name,
+      url: img.src,
+      public_id: publicId,
+      category:
+        img.category && img.category !== "本地" ? img.category : "cloud",
+    });
+
+    if (error) {
+      result.errors.push(`${img.name}: ${error.message}`);
+    } else {
+      result.added++;
+      console.log("补录云端索引:", img.name, publicId);
+    }
+  }
+
+  console.log(
+    `索引重建完成: 扫描 ${result.scanned} 张, Cloudinary ${result.cloudUrls} 张, 补录 ${result.added} 条, 跳过 ${result.skipped} 条`,
+  );
+  return result;
+}
+
+// ========== 改进的计数接口 ==========
+
+export interface CloudCountResult {
+  count: number;
+  error?: string;
+}
+
+export async function getCloudinaryImageCount(): Promise<CloudCountResult> {
+  const { data, error } = await supabase
+    .from("cloud_images")
+    .select("public_id");
+
+  if (error) {
+    console.error("Get cloud count error:", error);
+    return { count: 0, error: error.message };
+  }
+
+  const filtered = filterOutSamples(data || []);
+  return { count: filtered.length };
 }
 
 // ========== 删除（调用 Netlify Function） ==========
