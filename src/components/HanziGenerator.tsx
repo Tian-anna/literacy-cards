@@ -34,6 +34,12 @@ const FONT_OPTIONS = [
 const CANVAS_WIDTH = 493;
 const CANVAS_HEIGHT = 563;
 
+// 红色配置
+const BORDER_COLOR = "#e74c3c"; // 边框红色
+const GRID_COLOR = "#e74c3c"; // 网格红色
+const GRID_LINE_WIDTH = 1; // 细线
+const BORDER_LINE_WIDTH = 2; // 边框稍粗一点
+
 const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
   const { addImage } = useStore();
   const [inputText, setInputText] = useState("");
@@ -53,43 +59,68 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     return text.split("").filter((c) => /[\u4e00-\u9fa5]/.test(c));
   }, []);
 
-  // 绘制网格
+  // 绘制网格（红色虚线）
   const drawGrid = useCallback(
     (ctx: CanvasRenderingContext2D, w: number, h: number, type: GridType) => {
-      ctx.strokeStyle = "rgba(0,0,0,0.12)";
-      ctx.lineWidth = 1;
+      ctx.save();
+
+      // 设置红色虚线样式
+      ctx.strokeStyle = GRID_COLOR;
+      ctx.lineWidth = GRID_LINE_WIDTH;
+      ctx.setLineDash([8, 4]); // 虚线：8px 实线，4px 空白
+
       const hw = w / 2,
         hh = h / 2;
 
       if (type === "tian") {
-        ctx.strokeRect(0, 0, w, h);
+        // 外框（实线，不画虚线，由 drawBorder 处理）
+        // 横中线
         ctx.beginPath();
         ctx.moveTo(0, hh);
         ctx.lineTo(w, hh);
         ctx.stroke();
+        // 竖中线
         ctx.beginPath();
         ctx.moveTo(hw, 0);
         ctx.lineTo(hw, h);
         ctx.stroke();
       } else if (type === "mi") {
-        ctx.strokeRect(0, 0, w, h);
+        // 横中线
         ctx.beginPath();
         ctx.moveTo(0, hh);
         ctx.lineTo(w, hh);
         ctx.stroke();
+        // 竖中线
         ctx.beginPath();
         ctx.moveTo(hw, 0);
         ctx.lineTo(hw, h);
         ctx.stroke();
+        // 对角线1
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(w, h);
         ctx.stroke();
+        // 对角线2
         ctx.beginPath();
         ctx.moveTo(w, 0);
         ctx.lineTo(0, h);
         ctx.stroke();
       }
+
+      ctx.restore();
+    },
+    [],
+  );
+
+  // 绘制红色边框（实线）
+  const drawBorder = useCallback(
+    (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+      ctx.save();
+      ctx.strokeStyle = BORDER_COLOR;
+      ctx.lineWidth = BORDER_LINE_WIDTH;
+      ctx.setLineDash([]); // 实线
+      ctx.strokeRect(0, 0, w, h);
+      ctx.restore();
     },
     [],
   );
@@ -104,23 +135,38 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       const ctx = canvas.getContext("2d");
       if (!ctx) return null;
 
+      // 白色背景
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      drawGrid(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, gridType);
 
+      // 先画红色边框
+      drawBorder(ctx, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      // 再画内部网格（红色虚线）
+      if (gridType !== "plain") {
+        drawGrid(ctx, CANVAS_WIDTH, CANVAS_HEIGHT, gridType);
+      }
+
+      // 绘制汉字（不加粗）
       ctx.fillStyle = "#000000";
       ctx.font = `${fontSize}px ${fontFamily}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(char, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
 
+      // 纯文字模式加淡色边框提示
       if (gridType === "plain") {
-        ctx.strokeStyle = "rgba(0,0,0,0.05)";
+        ctx.save();
+        ctx.strokeStyle = "rgba(231, 76, 60, 0.15)"; // 淡红色
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]); // 实线
         ctx.strokeRect(1, 1, CANVAS_WIDTH - 2, CANVAS_HEIGHT - 2);
+        ctx.restore();
       }
+
       return canvas.toDataURL("image/png", 1.0);
     },
-    [gridType, fontSize, fontFamily, drawGrid],
+    [gridType, fontSize, fontFamily, drawGrid, drawBorder],
   );
 
   const previewUrl = useMemo(() => {
@@ -166,7 +212,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
           }
         }
 
-        // ==================== 修复：删除 id 和 createdAt ====================
         addImage({
           src: finalSrc,
           name: chars[i],
@@ -174,7 +219,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
           width: CANVAS_WIDTH,
           height: CANVAS_HEIGHT,
         });
-        // ================================================================
 
         uploadedIds.push(tempId);
         setUploadProgress({ current: i + 1, total: chars.length });
