@@ -10,10 +10,12 @@ import { CardImage } from "@/types";
 import {
   getCloudinaryImages,
   getCloudinaryImageCount,
+  getHanziImages,
   clearAllCloudImages,
   cleanInvalidCloudImages,
   CleanResult,
 } from "@/utils/cloudinaryApi";
+import HanziGenerator from "./HanziGenerator";
 
 interface ImageLibraryProps {
   onAddToCanvas?: (imageId: string) => void;
@@ -48,6 +50,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const [sortBy, setSortBy] = useState<"name" | "date">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [cloudCount, setCloudCount] = useState<number | null>(null);
+  const [hanziCount, setHanziCount] = useState<number | null>(null);
   const [isLoadingCloudCount, setIsLoadingCloudCount] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isBatchMode, setIsBatchMode] = useState(false);
@@ -75,11 +78,16 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const fetchCloudCount = useCallback(async () => {
     setIsLoadingCloudCount(true);
     try {
-      const count = await getCloudinaryImageCount();
+      const [count, hanzi] = await Promise.all([
+        getCloudinaryImageCount(),
+        getHanziImages().then((imgs) => imgs.length),
+      ]);
       setCloudCount(count);
+      setHanziCount(hanzi);
     } catch (error) {
       console.error("获取云端图片数量失败:", error);
       setCloudCount(null);
+      setHanziCount(null);
     } finally {
       setIsLoadingCloudCount(false);
     }
@@ -156,10 +164,12 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   };
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { 全部: images.length };
+    const counts: Record<string, number> = { 全部: images.length, 汉字: 0 };
     categories.forEach((cat) => {
       counts[cat] = images.filter((img) => img.category === cat).length;
     });
+    // 统计汉字分类
+    counts["汉字"] = images.filter((img) => img.category === "汉字").length;
     return counts;
   }, [images, categories]);
 
@@ -223,15 +233,12 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   }, [displayMode, filteredImages.length]);
 
   // ==================== Safari 滚动修复：强制重排 + 高度刷新 ====================
-  // Safari 在动态内容加载后无法自动识别新的滚动区域高度
-  // 通过强制重排触发 Safari 重新计算滚动容器高度
   useEffect(() => {
     if (displayMode === "all" && scrollContainerRef.current) {
       const el = scrollContainerRef.current;
-      // 强制 Safari 重新计算布局
       const originalOverflow = el.style.overflow;
       el.style.overflow = "hidden";
-      void el.offsetHeight; // 强制重排 (reflow)
+      void el.offsetHeight;
       el.style.overflow = originalOverflow || "";
     }
   }, [loadedCount, displayMode, filteredImages.length]);
@@ -320,7 +327,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
   const handleSyncCloud = async () => {
     if (
       !confirm(
-        "确定同步云端图片吗？\n\n这会:\n1. 检查所有云端图片是否可访问\n2. 删除 Cloudinary 中已不存在但 Supabase 中仍有的记录\n3. 将云端图片同步到本地图库",
+        "确定同步云端图片吗？\n\n这会:\n1. 检查所有云端图片是否可访问\n2. 删除 Cloudinary 中已不存在但 Supabase 中仍有的记录\n3. 将云端图片同步到本地图库（包括汉字图片）",
       )
     )
       return;
@@ -345,7 +352,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
           addImage({
             src: img.url,
             name: img.name,
-            category: "云端",
+            category: img.category || "云端",
             width: 300,
             height: 300,
           });
@@ -371,49 +378,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     } catch (error) {
       console.error("同步云端图片失败:", error);
       alert("同步失败: " + (error as Error).message);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleSyncFromCloud = async () => {
-    if (images.length > 0) {
-      if (!confirm("本地已有图片，同步可能导致重复。是否继续？")) return;
-    }
-
-    setIsSyncing(true);
-    try {
-      const cloudImages = await getCloudinaryImages();
-      let addedCount = 0;
-      let skippedCount = 0;
-
-      for (const img of cloudImages) {
-        const exists = images.some(
-          (localImg) => localImg.src === img.url || localImg.name === img.name,
-        );
-        if (!exists) {
-          addImage({
-            src: img.url,
-            name: img.name,
-            category: "云端",
-            width: 300,
-            height: 300,
-          });
-          addedCount++;
-        } else {
-          skippedCount++;
-        }
-      }
-
-      setCloudCount(cloudImages.length);
-      const msg =
-        skippedCount > 0
-          ? `同步完成，新增 ${addedCount} 张，跳过 ${skippedCount} 张重复`
-          : `同步完成，新增 ${addedCount} 张图片`;
-      alert(msg);
-    } catch (error) {
-      console.error("从云端同步失败:", error);
-      alert("同步失败，请查看控制台");
     } finally {
       setIsSyncing(false);
     }
@@ -537,6 +501,9 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
 
         {isExpanded && (
           <>
+            {/* 汉字生成器 - 集成在图库顶部 */}
+            <HanziGenerator onAddToCanvas={onAddToCanvas} />
+
             {/* 云端信息 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <div className="flex items-center justify-between text-gray-500">
@@ -561,6 +528,12 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   )}
                 </div>
               </div>
+              {hanziCount !== null && hanziCount > 0 && (
+                <div className="flex items-center justify-between text-gray-500 mt-0.5">
+                  <span>汉字:</span>
+                  <span className="text-orange-500">{hanziCount} 张</span>
+                </div>
+              )}
             </div>
 
             {/* 同步云端按钮 */}
@@ -599,28 +572,6 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               </div>
             )}
 
-            {/* 从云端同步按钮 */}
-            <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
-              <button
-                onClick={handleSyncFromCloud}
-                disabled={isSyncing}
-                className="w-full px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
-                style={{ borderRadius: "8px" }}
-              >
-                {isSyncing ? (
-                  <>
-                    <span className="animate-spin">↻</span>
-                    <span>同步中...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>⬇️</span>
-                    <span>从云端导入</span>
-                  </>
-                )}
-              </button>
-            </div>
-
             {/* 分类筛选 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-100">
               <div className="flex items-center justify-between mb-1">
@@ -634,6 +585,30 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 </button>
               </div>
 
+              {/* 汉字快捷分类按钮 */}
+              <div className="flex gap-1 mb-1.5">
+                <button
+                  onClick={() => setSelectedCategory("汉字")}
+                  className={`px-2 py-0.5 rounded text-xs ${
+                    selectedCategory === "汉字"
+                      ? "bg-orange-500 text-white"
+                      : "bg-orange-50 text-orange-600 hover:bg-orange-100"
+                  }`}
+                >
+                  汉字 ({categoryCounts["汉字"] || 0})
+                </button>
+                <button
+                  onClick={() => setSelectedCategory("全部")}
+                  className={`px-2 py-0.5 rounded text-xs ${
+                    selectedCategory === "全部"
+                      ? "bg-green-500 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  全部
+                </button>
+              </div>
+
               <select
                 value={selectedCategory}
                 onChange={(e) => {
@@ -643,7 +618,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-green-500 bg-white"
                 style={{ borderRadius: "8px" }}
               >
-                {["全部", ...categories].map((cat) => (
+                {[
+                  "全部",
+                  "汉字",
+                  ...categories.filter((c) => c !== "汉字"),
+                ].map((cat) => (
                   <option key={cat} value={cat}>
                     {cat} ({categoryCounts[cat] || 0})
                   </option>
@@ -673,7 +652,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {categories
-                      .filter((c) => c !== "未分类")
+                      .filter((c) => c !== "未分类" && c !== "汉字")
                       .map((cat) => (
                         <span
                           key={cat}
@@ -883,30 +862,17 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
             )}
 
             {/* ==================== 图片列表 - Safari 滚动核心修复 ==================== */}
-            {/* 
-              Safari 滚动修复要点：
-              1. 不设置 touchAction —— Safari 只支持 auto/manipulation，其他值无效或有害
-              2. 设置 -webkit-overflow-scrolling: touch —— iOS Safari 惯性滚动必需
-              3. 不添加任何 React onTouchStart/onTouchMove 事件处理器 —— 避免干扰原生滚动
-              4. 确保容器有明确的高度计算 —— flex-1 需要父容器有确定高度
-              5. 使用 stopPropagation 仅阻止事件冒泡到画布，不阻止默认行为
-            */}
             <div
               ref={scrollContainerRef}
               className="flex-1 overflow-y-auto p-2 image-library-scroll"
               style={{
-                // iOS Safari 惯性滚动必需
                 WebkitOverflowScrolling: "touch",
-                // 防止弹性滚动传播到父元素
                 overscrollBehavior: "contain",
-                // 防止文本选择干扰滚动
                 WebkitTouchCallout: "none",
                 WebkitUserSelect: "none",
                 userSelect: "none",
-                // 确保 Safari 正确识别为可滚动区域
                 position: "relative",
               }}
-              // 只阻止事件冒泡到画布层，绝不阻止默认滚动行为
               onTouchStart={(e) => {
                 e.stopPropagation();
               }}
@@ -918,7 +884,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 <div className="text-center py-8 text-gray-400">
                   {searchTerm
                     ? "无结果"
-                    : "暂无图片，点击 📁 添加或 🔄 同步云端"}
+                    : "暂无图片，使用上方汉字生成器或点击 🔄 同步云端"}
                 </div>
               ) : (
                 <>
@@ -935,10 +901,11 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                         className={`relative aspect-square rounded-md overflow-hidden border-2 cursor-pointer transition-all hover:shadow-md ${
                           isBatchMode && selectedImages.has(image.id)
                             ? "border-green-500 ring-2 ring-green-300"
-                            : "border-gray-200 hover:border-green-300"
+                            : image.category === "汉字"
+                              ? "border-orange-200 hover:border-orange-400"
+                              : "border-gray-200 hover:border-green-300"
                         }`}
                         onClick={() => handleImageClick(image.id)}
-                        // 阻止图片项的触摸事件冒泡到画布
                         onTouchStart={(e) => e.stopPropagation()}
                         onTouchMove={(e) => e.stopPropagation()}
                       >
@@ -975,6 +942,13 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                             </div>
                           )}
                         </div>
+
+                        {/* 汉字分类标签 */}
+                        {image.category === "汉字" && (
+                          <div className="absolute top-0.5 left-0.5 px-1 py-0.5 bg-orange-500 text-white text-[8px] rounded">
+                            汉字
+                          </div>
+                        )}
 
                         {isBatchMode && selectedImages.has(image.id) && (
                           <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white shadow-sm">

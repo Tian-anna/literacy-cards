@@ -7,9 +7,73 @@ const UPLOAD_PRESET = "literacy-cards";
 const NETLIFY_API_URL =
   "https://effervescent-kulfi-8283b0.netlify.app/.netlify/functions/delete-cloudinary";
 
-console.log("Cloudinary config:");
-console.log("  Cloud Name:", CLOUD_NAME);
-console.log("  Upload Preset:", UPLOAD_PRESET);
+// ========== GitHub 存储配置（备选方案） ==========
+const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
+const GITHUB_REPO =
+  import.meta.env.VITE_GITHUB_REPO || "Tian-anna/literacy-cards";
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function getFileSha(path: string): Promise<string> {
+  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `token ${GITHUB_TOKEN}` },
+  });
+  if (!res.ok) throw new Error("获取文件信息失败");
+  const data = await res.json();
+  return data.sha;
+}
+
+export async function uploadImageToGitHub(file: File): Promise<string> {
+  const base64 = await fileToBase64(file);
+  const content = base64.split(",")[1];
+  const path = `images/${Date.now()}_${file.name}`;
+  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `token ${GITHUB_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message: "添加图片", content }),
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.message || "上传失败");
+  }
+  const data = await res.json();
+  return data.content.download_url;
+}
+
+export async function deleteImageFromGitHub(fileName: string): Promise<void> {
+  const path = `images/${fileName}`;
+  try {
+    const sha = await getFileSha(path);
+    const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        Authorization: `token ${GITHUB_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: "删除图片", sha }),
+    });
+    if (!res.ok) throw new Error("删除失败");
+    console.log("已删除 GitHub 文件:", fileName);
+  } catch (error) {
+    console.error("删除 GitHub 文件失败:", error);
+    throw error;
+  }
+}
 
 // ========== Cloudinary 示例图片过滤 ==========
 
@@ -84,7 +148,7 @@ async function checkImageExists(
   return data;
 }
 
-// ========== 上传 ==========
+// ========== 通用上传（原有图片） ==========
 
 export async function uploadImageToCloudinary(file: File): Promise<string> {
   const fileName = file.name.replace(/\.[^/.]+$/, "");
@@ -104,7 +168,7 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("upload_preset", UPLOAD_PRESET);
-  formData.append("folder", "literacy-cards"); // ← 放到指定文件夹
+  formData.append("folder", "literacy-cards"); // ← 普通图片放到 literacy-cards
 
   const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
   console.log("Uploading to:", url);
@@ -125,7 +189,6 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
 
   // 保存到 Supabase（更新或插入）
   if (existing) {
-    // 更新已有记录
     const { error } = await supabase
       .from("cloud_images")
       .update({
@@ -134,11 +197,8 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
       })
       .eq("name", fileName);
 
-    if (error) {
-      console.error("Supabase update error:", error);
-    }
+    if (error) console.error("Supabase update error:", error);
   } else {
-    // 插入新记录
     const { error } = await supabase.from("cloud_images").insert({
       name: fileName,
       url: data.secure_url,
@@ -146,12 +206,110 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
       category: "cloud",
     });
 
-    if (error) {
-      console.error("Supabase insert error:", error);
-    }
+    if (error) console.error("Supabase insert error:", error);
   }
 
   console.log("Saved to Supabase");
+  return data.secure_url;
+}
+
+// ========== 汉字专用上传（隔离存储 + 多端一致性保证） ==========
+
+export interface HanziStyleConfig {
+  gridType: "tian" | "mi" | "huigong" | "pinyin" | "plain"; // 田字格/米字格/回宫格/拼音格/纯文字
+  fontSize: number;
+  color: string;
+  bgColor: string;
+  fontFamily: string;
+  showStrokeOrder?: boolean; // 未来扩展：笔顺
+  showPinyin?: boolean; // 拼音格专用
+  pinyinText?: string; // 拼音内容
+}
+
+/**
+ * 上传汉字图片到 Cloudinary（专用文件夹隔离）
+ * 使用 public_id 包含样式信息，确保多端渲染一致
+ */
+export async function uploadHanziToCloudinary(
+  dataUrl: string,
+  char: string,
+  styleConfig: HanziStyleConfig,
+): Promise<string> {
+  const timestamp = Date.now();
+  // public_id 包含汉字和样式摘要，便于管理和识别
+  const styleTag = `${styleConfig.gridType}_${styleConfig.fontSize}`;
+  const publicId = `hanzi_${char}_${styleTag}_${timestamp}`;
+
+  const file = dataUrlToFile(dataUrl, publicId);
+
+  // 检查是否已存在相同汉字+样式的图片
+  const { data: existing } = await supabase
+    .from("cloud_images")
+    .select("url, public_id")
+    .eq("name", char)
+    .eq("category", "汉字")
+    .maybeSingle();
+
+  if (existing) {
+    const isAccessible = await checkImageAccessible(existing.url);
+    if (isAccessible) {
+      console.log("汉字图片已存在，直接复用:", existing.url);
+      return existing.url;
+    }
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", UPLOAD_PRESET);
+  // 关键：汉字图片单独存放到 literacy-cards/hanzi/ 文件夹
+  formData.append("folder", "literacy-cards/hanzi");
+  formData.append("public_id", publicId);
+  // 添加标签便于分类管理
+  formData.append("tags", `hanzi,${styleConfig.gridType},literacy`);
+
+  const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    console.error("Cloudinary hanzi upload error:", error);
+    // 降级到 GitHub
+    console.log("尝试降级到 GitHub 存储...");
+    try {
+      return await uploadImageToGitHub(file);
+    } catch (githubError) {
+      throw new Error(
+        `上传失败 (Cloudinary: ${error.error?.message || "未知"}, GitHub: ${githubError})`,
+      );
+    }
+  }
+
+  const data = await res.json();
+  console.log("Hanzi upload success:", data.secure_url);
+
+  // 保存到 Supabase，标记为汉字分类
+  const { error } = await supabase.from("cloud_images").insert({
+    name: char,
+    url: data.secure_url,
+    public_id: data.public_id,
+    category: "汉字",
+    metadata: {
+      gridType: styleConfig.gridType,
+      fontSize: styleConfig.fontSize,
+      color: styleConfig.color,
+      bgColor: styleConfig.bgColor,
+      fontFamily: styleConfig.fontFamily,
+    },
+  });
+
+  if (error) {
+    console.error("Supabase hanzi insert error:", error);
+  }
+
   return data.secure_url;
 }
 
@@ -168,7 +326,6 @@ export async function getCloudinaryImages() {
     return [];
   }
 
-  // 过滤掉 Cloudinary 示例图片
   const filtered = filterOutSamples(data || []);
 
   if ((data || []).length !== filtered.length) {
@@ -190,19 +347,29 @@ export async function getCloudinaryImageCount(): Promise<number> {
     return 0;
   }
 
-  // 只计算非示例图片
   const filtered = filterOutSamples(data || []);
   return filtered.length;
 }
 
+/** 获取汉字图片列表（专用接口） */
+export async function getHanziImages() {
+  const { data, error } = await supabase
+    .from("cloud_images")
+    .select("*")
+    .eq("category", "汉字")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Get hanzi images error:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
 // ========== 删除（调用 Netlify Function） ==========
 
-/**
- * 删除单张云端图片
- * 先调用 Netlify Function 删除 Cloudinary 图片，再删除 Supabase 记录
- */
 export async function deleteCloudImage(public_id: string): Promise<boolean> {
-  // 阻止删除 Cloudinary 示例图片
   if (isCloudinarySample(public_id)) {
     console.warn("无法删除 Cloudinary 示例图片:", public_id);
     throw new Error("Cloudinary 示例图片无法删除");
@@ -247,7 +414,6 @@ export async function deleteCloudImage(public_id: string): Promise<boolean> {
 export async function clearAllCloudImages(): Promise<number> {
   console.log("Clearing all cloud images");
 
-  // 先获取所有非示例图片
   const { data, error: fetchError } = await supabase
     .from("cloud_images")
     .select("public_id");
@@ -265,7 +431,6 @@ export async function clearAllCloudImages(): Promise<number> {
     return 0;
   }
 
-  // 逐个删除（调用 Netlify Function 同步删除 Cloudinary）
   let deletedCount = 0;
   for (const img of myImages) {
     try {
@@ -283,19 +448,13 @@ export async function clearAllCloudImages(): Promise<number> {
 // ========== 清理无效图片 ==========
 
 export interface CleanResult {
-  total: number; // Supabase 中总记录数
-  checked: number; // 实际检查了多少张
-  invalid: number; // 发现多少张无效
-  deleted: number; // 成功删除多少条记录
-  errors: string[]; // 错误信息
+  total: number;
+  checked: number;
+  invalid: number;
+  deleted: number;
+  errors: string[];
 }
 
-/**
- * 清理无效图片
- * 1. 先清理 Cloudinary 示例图片的记录（这些不是用户上传的）
- * 2. 检查剩余图片 URL 是否可访问
- * 3. 删除不可访问的记录
- */
 export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   console.log("开始清理无效云端图片...");
 
@@ -307,7 +466,6 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     errors: [],
   };
 
-  // 1. 获取所有云端图片记录
   const { data: images, error } = await supabase
     .from("cloud_images")
     .select("*");
@@ -325,7 +483,7 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   result.total = images.length;
   console.log(`云端共有 ${images.length} 条记录`);
 
-  // 2. 先清理 Cloudinary 示例图片的记录
+  // 先清理 Cloudinary 示例图片的记录
   const sampleImages = images.filter((img) =>
     isCloudinarySample(img.public_id),
   );
@@ -353,7 +511,7 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     }
   }
 
-  // 3. 检查用户上传图片的可访问性
+  // 检查用户上传图片的可访问性
   const userImages = images.filter((img) => !isCloudinarySample(img.public_id));
   const invalidIds: number[] = [];
 
@@ -368,12 +526,11 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     }
   }
 
-  // 4. 删除无效记录（同时也尝试删除 Cloudinary 图片）
+  // 删除无效记录
   for (const id of invalidIds) {
     const img = userImages.find((i) => i.id === id);
     if (img) {
       try {
-        // 尝试删除 Cloudinary 图片
         await fetch(NETLIFY_API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -405,4 +562,32 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   );
 
   return result;
+}
+
+// ========== DataURL 转 File（用于汉字生成器上传） ==========
+
+export function dataUrlToFile(dataUrl: string, fileName: string): File {
+  const arr = dataUrl.split(",");
+  const mime = arr[0].match(/:(.*?);/)?.[1] || "image/png";
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+
+  return new File([u8arr], `${fileName}.png`, { type: mime });
+}
+
+/**
+ * 上传 DataURL 图片到 Cloudinary
+ * 复用现有的 uploadImageToCloudinary，只是把 DataURL 包装成 File
+ */
+export async function uploadDataUrlToCloudinary(
+  dataUrl: string,
+  fileName: string,
+): Promise<string> {
+  const file = dataUrlToFile(dataUrl, fileName);
+  return uploadImageToCloudinary(file);
 }
