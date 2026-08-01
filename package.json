@@ -21,6 +21,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.110.0",
     "@types/uuid": "^10.0.0",
+    "cloudinary": "^2.10.0",
     "idb-keyval": "^6.2.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
