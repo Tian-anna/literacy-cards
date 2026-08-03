@@ -5,16 +5,11 @@ import { supabase } from "./supabase";
 const CLOUD_NAME = "kqcvg4iw";
 const UPLOAD_PRESET = "literacy-cards";
 
-// Netlify Function URL
-const NETLIFY_API_URL =
-  "https://effervescent-kulfi-8283b0.netlify.app/.netlify/functions/delete-cloudinary";
-
 // GitHub storage config
 const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GITHUB_REPO =
   import.meta.env.VITE_GITHUB_REPO || "Tian-anna/literacy-cards";
 
-// Debug tools
 function logDebug(label: string, data?: any) {
   console.log(`[CloudAPI] ${label}`, data || "");
 }
@@ -23,7 +18,6 @@ function logError(label: string, error: any) {
   console.error(`[CloudAPI] ${label}:`, error);
 }
 
-// File conversion
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -43,7 +37,6 @@ async function getFileSha(path: string): Promise<string> {
   return data.sha;
 }
 
-// GitHub upload/delete
 export async function uploadImageToGitHub(file: File): Promise<string> {
   const base64 = await fileToBase64(file);
   const content = base64.split(",")[1];
@@ -88,7 +81,6 @@ export async function deleteImageFromGitHub(fileName: string): Promise<void> {
   }
 }
 
-// Cloudinary sample filter
 export function isCloudinarySample(publicId: string): boolean {
   if (!publicId) return false;
   const lower = publicId.toLowerCase();
@@ -112,12 +104,8 @@ export function checkImageAccessible(url: string): Promise<boolean> {
       resolve(false);
       return;
     }
-
     const img = new Image();
-    const timeout = setTimeout(() => {
-      resolve(false);
-    }, 5000);
-
+    const timeout = setTimeout(() => resolve(false), 5000);
     img.onload = () => {
       clearTimeout(timeout);
       if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
@@ -126,35 +114,29 @@ export function checkImageAccessible(url: string): Promise<boolean> {
       }
       resolve(true);
     };
-
     img.onerror = () => {
       clearTimeout(timeout);
       resolve(false);
     };
-
     const separator = url.includes("?") ? "&" : "?";
     img.src = `${url}${separator}_nocache=${Date.now()}`;
   });
 }
 
-// Database operations
 async function checkImageExists(
   fileName: string,
 ): Promise<{ url: string; public_id: string } | null> {
   logDebug("检查图片是否存在", fileName);
-
   try {
     const { data, error } = await supabase
       .from("cloud_images")
       .select("url, public_id")
       .eq("name", fileName)
       .maybeSingle();
-
     if (error) {
       logError("检查存在性时数据库错误", error);
       return null;
     }
-
     return data;
   } catch (e) {
     logError("检查存在性时异常", e);
@@ -162,7 +144,6 @@ async function checkImageExists(
   }
 }
 
-// General upload
 export async function uploadImageToCloudinary(file: File): Promise<string> {
   const fileName = file.name.replace(/\.[^/.]+$/, "");
   logDebug("开始上传", fileName);
@@ -185,11 +166,7 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
   logDebug("上传到 Cloudinary", url);
 
-  const res = await fetch(url, {
-    method: "POST",
-    body: formData,
-  });
-
+  const res = await fetch(url, { method: "POST", body: formData });
   if (!res.ok) {
     const error = await res.json();
     logError("Cloudinary 上传失败", error);
@@ -202,12 +179,8 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   if (existing) {
     const { error } = await supabase
       .from("cloud_images")
-      .update({
-        url: data.secure_url,
-        public_id: data.public_id,
-      })
+      .update({ url: data.secure_url, public_id: data.public_id })
       .eq("name", fileName);
-
     if (error) logError("Supabase 更新错误", error);
   } else {
     const { error } = await supabase.from("cloud_images").insert({
@@ -216,7 +189,6 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
       public_id: data.public_id,
       category: "cloud",
     });
-
     if (error) logError("Supabase 插入错误", error);
   }
 
@@ -224,7 +196,6 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
   return data.secure_url;
 }
 
-// Hanzi/English upload
 export interface HanziStyleConfig {
   gridType: "tian" | "mi" | "plain";
   fontSize: number;
@@ -243,7 +214,6 @@ export async function uploadHanziToCloudinary(
   const publicId = `hanzi_${char}_${styleTag}_${timestamp}`;
   const file = dataUrlToFile(dataUrl, publicId);
 
-  // Detect English vs Hanzi
   const isEnglish = /^[a-zA-Z]+$/.test(char);
   const category = isEnglish ? "英文" : "汉字";
 
@@ -273,11 +243,7 @@ export async function uploadHanziToCloudinary(
   );
 
   const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    body: formData,
-  });
+  const res = await fetch(url, { method: "POST", body: formData });
 
   if (!res.ok) {
     const error = await res.json();
@@ -316,10 +282,8 @@ export async function uploadHanziToCloudinary(
   return data.secure_url;
 }
 
-// Get images
 export async function getCloudinaryImages() {
   logDebug("开始获取云端图片列表");
-
   try {
     const { data, error } = await supabase
       .from("cloud_images")
@@ -332,11 +296,6 @@ export async function getCloudinaryImages() {
     }
 
     const filtered = filterOutSamples(data || []);
-
-    if ((data || []).length !== filtered.length) {
-      logDebug(`过滤了 ${(data || []).length - filtered.length} 张示例图片`);
-    }
-
     logDebug(`获取到 ${filtered.length} 张云端图片`);
     return filtered;
   } catch (e) {
@@ -347,7 +306,6 @@ export async function getCloudinaryImages() {
 
 export async function getHanziImages() {
   logDebug("开始获取汉字图片列表");
-
   try {
     const { data, error } = await supabase
       .from("cloud_images")
@@ -368,7 +326,6 @@ export async function getHanziImages() {
   }
 }
 
-// Rebuild index
 export interface RebuildResult {
   scanned: number;
   cloudUrls: number;
@@ -446,7 +403,6 @@ export async function rebuildCloudIndexFromLocal(
   return result;
 }
 
-// Count
 export interface CloudCountResult {
   count: number;
   error?: string;
@@ -454,7 +410,6 @@ export interface CloudCountResult {
 
 export async function getCloudinaryImageCount(): Promise<CloudCountResult> {
   logDebug("开始查询云端图片数量");
-
   try {
     if (!supabase) {
       throw new Error("Supabase 客户端未初始化");
@@ -500,45 +455,15 @@ export async function getCloudinaryImageCount(): Promise<CloudCountResult> {
   }
 }
 
-// ========== 修复：删除 Cloudinary 图片（修复 CORS 问题）==========
+// 已移除 Netlify 后端调用，仅删除 Supabase 数据库记录
 export async function deleteCloudImage(public_id: string): Promise<boolean> {
   if (isCloudinarySample(public_id)) {
     logDebug("无法删除示例图片", public_id);
     throw new Error("Cloudinary 示例图片无法删除");
   }
 
-  logDebug("删除云端图片", public_id);
+  logDebug("删除云端图片记录（仅数据库）", public_id);
 
-  try {
-    // 使用 no-cors 模式或添加超时处理
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-    const backendRes = await fetch(NETLIFY_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ public_id }),
-      signal: controller.signal,
-      // 如果 Netlify Function 配置了 CORS，正常模式即可
-      // 如果没配置，需要改为 no-cors 但无法读取响应
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!backendRes.ok) {
-      const errorData = await backendRes.json().catch(() => ({}));
-      logError("删除 Cloudinary 图片失败", errorData);
-    } else {
-      const result = await backendRes.json().catch(() => ({}));
-      logDebug("Cloudinary 图片删除成功", result);
-    }
-  } catch (e) {
-    logError("调用后端删除 API 失败", e);
-    // 即使 API 调用失败，也继续删除 Supabase 记录
-    logDebug("继续删除 Supabase 记录...");
-  }
-
-  // 删除 Supabase 记录
   const { error } = await supabase
     .from("cloud_images")
     .delete()
@@ -549,12 +474,12 @@ export async function deleteCloudImage(public_id: string): Promise<boolean> {
     throw new Error(error.message);
   }
 
-  logDebug("删除成功 - Supabase 记录已移除");
+  logDebug("删除成功 - 数据库记录已移除（Cloudinary 文件仍保留）");
   return true;
 }
 
 export async function clearAllCloudImages(): Promise<number> {
-  logDebug("清空所有云端图片");
+  logDebug("清空所有云端图片记录");
 
   const { data, error: fetchError } = await supabase
     .from("cloud_images")
@@ -583,11 +508,12 @@ export async function clearAllCloudImages(): Promise<number> {
     }
   }
 
-  logDebug(`已删除 ${deletedCount} 张，跳过 ${sampleCount} 张示例图`);
+  logDebug(
+    `已删除 ${deletedCount} 条记录，跳过 ${sampleCount} 张示例图（Cloudinary 文件仍保留）`,
+  );
   return deletedCount;
 }
 
-// Clean invalid
 export interface CleanResult {
   total: number;
   checked: number;
@@ -597,7 +523,7 @@ export interface CleanResult {
 }
 
 export async function cleanInvalidCloudImages(): Promise<CleanResult> {
-  logDebug("开始清理无效云端图片...");
+  logDebug("开始清理无效云端图片记录...");
 
   const result: CleanResult = {
     total: 0,
@@ -624,13 +550,11 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   result.total = images.length;
   logDebug(`云端共有 ${images.length} 条记录`);
 
-  // Clean sample images
   const sampleImages = images.filter((img) =>
     isCloudinarySample(img.public_id),
   );
   if (sampleImages.length > 0) {
     logDebug(`发现 ${sampleImages.length} 张示例图片记录`);
-
     for (const img of sampleImages) {
       try {
         const { error: delError } = await supabase
@@ -652,7 +576,6 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     }
   }
 
-  // Check user images - batch parallel
   const userImages = images.filter((img) => !isCloudinarySample(img.public_id));
   const invalidIds: number[] = [];
 
@@ -676,20 +599,8 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     }
   }
 
+  // 仅删除 Supabase 记录，不再调用 Netlify 删除 Cloudinary 文件
   for (const id of invalidIds) {
-    const img = userImages.find((i) => i.id === id);
-    if (img) {
-      try {
-        await fetch(NETLIFY_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ public_id: img.public_id }),
-        });
-      } catch (e) {
-        logDebug("删除 Cloudinary 图片失败（可能已不存在）", img.public_id);
-      }
-    }
-
     try {
       const { error: delError } = await supabase
         .from("cloud_images")
@@ -697,12 +608,14 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
         .eq("id", id);
 
       if (delError) {
-        result.errors.push(`删除无效图片失败 id=${id}: ${delError.message}`);
+        result.errors.push(
+          `删除无效图片记录失败 id=${id}: ${delError.message}`,
+        );
       } else {
         result.deleted++;
       }
     } catch (e) {
-      result.errors.push(`删除无效图片异常 id=${id}: ${e}`);
+      result.errors.push(`删除无效图片记录异常 id=${id}: ${e}`);
     }
   }
 
@@ -710,18 +623,15 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   return result;
 }
 
-// DataURL to File
 export function dataUrlToFile(dataUrl: string, fileName: string): File {
   const arr = dataUrl.split(",");
   const mime = arr[0].match(/:(.*?);/)?.[1] || "image/png";
   const bstr = atob(arr[1]);
   let n = bstr.length;
   const u8arr = new Uint8Array(n);
-
   while (n--) {
     u8arr[n] = bstr.charCodeAt(n);
   }
-
   return new File([u8arr], `${fileName}.png`, { type: mime });
 }
 
