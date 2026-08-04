@@ -10,6 +10,7 @@ const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GITHUB_REPO =
   import.meta.env.VITE_GITHUB_REPO || "Tian-anna/literacy-cards";
 
+// Debug tools
 function logDebug(label: string, data?: any) {
   console.log(`[CloudAPI] ${label}`, data || "");
 }
@@ -18,6 +19,7 @@ function logError(label: string, error: any) {
   console.error(`[CloudAPI] ${label}:`, error);
 }
 
+// File conversion
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -37,6 +39,7 @@ async function getFileSha(path: string): Promise<string> {
   return data.sha;
 }
 
+// GitHub upload/delete
 export async function uploadImageToGitHub(file: File): Promise<string> {
   const base64 = await fileToBase64(file);
   const content = base64.split(",")[1];
@@ -81,6 +84,7 @@ export async function deleteImageFromGitHub(fileName: string): Promise<void> {
   }
 }
 
+// Cloudinary sample filter
 export function isCloudinarySample(publicId: string): boolean {
   if (!publicId) return false;
   const lower = publicId.toLowerCase();
@@ -98,6 +102,7 @@ export function filterOutSamples<T extends { public_id?: string }>(
   return images.filter((img) => !isCloudinarySample(img.public_id || ""));
 }
 
+// ========== 修复：Safari 使用 fetch HEAD 检测，避免 CORS 误判 ==========
 export function checkImageAccessible(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     if (!url || !url.startsWith("http")) {
@@ -105,6 +110,37 @@ export function checkImageAccessible(url: string): Promise<boolean> {
       return;
     }
 
+    // 检测是否为 Safari（包括 iPad Safari）
+    const isSafari =
+      /^((?!chrome|android).)*safari/i.test(navigator.userAgent) &&
+      !/chrome/i.test(navigator.userAgent);
+
+    if (isSafari) {
+      // Safari：使用 fetch HEAD + no-cors 检测
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+        resolve(false);
+      }, 8000);
+
+      fetch(url, {
+        method: "HEAD",
+        mode: "no-cors",
+        signal: controller.signal,
+        cache: "no-cache",
+      })
+        .then(() => {
+          clearTimeout(timeout);
+          resolve(true);
+        })
+        .catch(() => {
+          clearTimeout(timeout);
+          resolve(false);
+        });
+      return;
+    }
+
+    // Chrome/Edge/Firefox：使用 Image 加载检测（带重试）
     const tryLoad = (attempt: number) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
@@ -142,6 +178,7 @@ export function checkImageAccessible(url: string): Promise<boolean> {
   });
 }
 
+// Database operations
 async function checkImageExists(
   fileName: string,
 ): Promise<{ url: string; public_id: string } | null> {
@@ -163,6 +200,7 @@ async function checkImageExists(
   }
 }
 
+// General upload
 export async function uploadImageToCloudinary(file: File): Promise<string> {
   const fileName = file.name.replace(/\.[^/.]+$/, "");
   logDebug("开始上传", fileName);
@@ -223,11 +261,10 @@ export interface HanziStyleConfig {
   fontFamily: string;
 }
 
-// ========== 修改：增加 fileName 参数（拼音/英文）==========
 export async function uploadHanziToCloudinary(
   dataUrl: string,
-  char: string, // 原始字符，用于数据库 name 字段
-  fileName: string, // 拼音/英文，用于 public_id 和文件名
+  char: string,
+  fileName: string,
   styleConfig: HanziStyleConfig,
 ): Promise<string> {
   const timestamp = Date.now();
@@ -662,6 +699,7 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   logDebug("清理完成", result);
   return result;
 }
+
 // ========== 从本地图库恢复 Supabase 记录（不重新上传文件）==========
 export async function restoreCloudRecordsFromLocal(
   localImages: { src: string; name: string; category?: string }[],
@@ -733,7 +771,7 @@ export async function restoreCloudRecordsFromLocal(
 
   return result;
 }
-// ========== 修改：根据 MIME 类型自动选择后缀 ==========
+
 export function dataUrlToFile(dataUrl: string, fileName: string): File {
   const arr = dataUrl.split(",");
   const mime = arr[0].match(/:(.*?);/)?.[1] || "image/png";

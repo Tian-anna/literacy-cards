@@ -308,6 +308,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setLoadedCount(0);
   };
 
+  // ========== 修改：同步云端时兼容 Safari，清理失败不阻塞同步 ==========
   const handleSyncCloud = async () => {
     if (!confirm("确定同步云端图片吗？\n\n这会检查云端图片并同步到本地图库"))
       return;
@@ -316,10 +317,33 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     setLastSyncResult(null);
 
     try {
-      const [cleanResult, cloudImages] = await Promise.all([
-        cleanInvalidCloudImages(),
-        getCloudinaryImages(),
-      ]);
+      // 先获取云端图片，不让清理失败阻塞同步
+      const cloudImages = await getCloudinaryImages();
+
+      let cleanResult: CleanResult = {
+        total: 0,
+        checked: 0,
+        invalid: 0,
+        deleted: 0,
+        errors: [],
+      };
+
+      try {
+        cleanResult = await cleanInvalidCloudImages();
+      } catch (cleanError) {
+        console.warn(
+          "清理无效图片时出错（可能是 Safari 检测限制）:",
+          cleanError,
+        );
+        // Safari 下图片检测可能因 CORS/HEAD 限制误报，跳过清理继续同步
+        cleanResult = {
+          total: cloudImages.length,
+          checked: cloudImages.length,
+          invalid: 0,
+          deleted: 0,
+          errors: [(cleanError as Error).message],
+        };
+      }
       setLastCleanResult(cleanResult);
 
       let addedCount = 0;
@@ -350,8 +374,13 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
         removed: cleanResult.deleted,
       });
 
+      const warnMsg =
+        cleanResult.errors.length > 0
+          ? `\n\n注意: 清理时遇到 ${cleanResult.errors.length} 个警告（Safari 可能限制检测，已跳过清理继续同步）`
+          : "";
+
       alert(
-        `同步完成！\n新增: ${addedCount} 张\n跳过: ${skippedCount} 张\n清理: ${cleanResult.deleted} 条`,
+        `同步完成！\n新增: ${addedCount} 张\n跳过: ${skippedCount} 张\n清理: ${cleanResult.deleted} 条${warnMsg}`,
       );
     } catch (error) {
       console.error("同步云端图片失败:", error);
@@ -455,6 +484,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
+  // ========== 修改：清理无效时增加 Safari 友好提示 ==========
   const handleCleanInvalid = async () => {
     if (
       !confirm(
@@ -477,7 +507,16 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       );
     } catch (e) {
       console.error("清理失败:", e);
-      alert("清理失败: " + (e as Error).message);
+      const errMsg = (e as Error).message || "";
+
+      // Safari 下检测可能误报，给出针对性提示
+      if (errMsg.includes("检测到") && errMsg.includes("张图片失效")) {
+        alert(
+          `清理已中止：${errMsg}\n\n建议：\n1. 检查网络连接后重试\n2. 如使用 Safari，可换用 Chrome/Edge 浏览器执行清理\n3. 或直接点击「同步云端」跳过清理步骤`,
+        );
+      } else {
+        alert("清理失败: " + errMsg);
+      }
     } finally {
       setIsCleaning(false);
     }
