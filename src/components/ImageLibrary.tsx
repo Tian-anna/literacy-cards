@@ -1031,9 +1031,19 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                                 alt={image.name}
                                 className="w-full h-full object-cover pointer-events-none"
                                 draggable={false}
-                                loading="lazy"
+                                decoding="async"
                                 onError={(e) => {
                                   const target = e.target as HTMLImageElement;
+                                  // Safari 偶发加载失败，重试一次
+                                  if (!target.dataset.retried && image.src) {
+                                    target.dataset.retried = "true";
+                                    const src = image.src;
+                                    target.src = "";
+                                    requestAnimationFrame(() => {
+                                      target.src = src;
+                                    });
+                                    return;
+                                  }
                                   target.style.display = "none";
                                   const parent = target.parentElement;
                                   if (parent) {
