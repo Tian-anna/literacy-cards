@@ -10,6 +10,7 @@ const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GITHUB_REPO =
   import.meta.env.VITE_GITHUB_REPO || "Tian-anna/literacy-cards";
 
+// Debug tools
 function logDebug(label: string, data?: any) {
   console.log(`[CloudAPI] ${label}`, data || "");
 }
@@ -18,6 +19,7 @@ function logError(label: string, error: any) {
   console.error(`[CloudAPI] ${label}:`, error);
 }
 
+// File conversion
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -37,6 +39,7 @@ async function getFileSha(path: string): Promise<string> {
   return data.sha;
 }
 
+// GitHub upload/delete
 export async function uploadImageToGitHub(file: File): Promise<string> {
   const base64 = await fileToBase64(file);
   const content = base64.split(",")[1];
@@ -81,6 +84,7 @@ export async function deleteImageFromGitHub(fileName: string): Promise<void> {
   }
 }
 
+// Cloudinary sample filter
 export function isCloudinarySample(publicId: string): boolean {
   if (!publicId) return false;
   const lower = publicId.toLowerCase();
@@ -104,25 +108,45 @@ export function checkImageAccessible(url: string): Promise<boolean> {
       resolve(false);
       return;
     }
-    const img = new Image();
-    const timeout = setTimeout(() => resolve(false), 5000);
-    img.onload = () => {
-      clearTimeout(timeout);
-      if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
-        resolve(false);
-        return;
-      }
-      resolve(true);
+
+    const tryLoad = (attempt: number) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+
+      const timeout = setTimeout(() => {
+        if (attempt < 2) {
+          setTimeout(() => tryLoad(attempt + 1), 500);
+        } else {
+          resolve(false);
+        }
+      }, 8000);
+
+      img.onload = () => {
+        clearTimeout(timeout);
+        if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      };
+
+      img.onerror = () => {
+        clearTimeout(timeout);
+        if (attempt < 2) {
+          setTimeout(() => tryLoad(attempt + 1), 500);
+        } else {
+          resolve(false);
+        }
+      };
+
+      img.src = url;
     };
-    img.onerror = () => {
-      clearTimeout(timeout);
-      resolve(false);
-    };
-    const separator = url.includes("?") ? "&" : "?";
-    img.src = `${url}${separator}_nocache=${Date.now()}`;
+
+    tryLoad(1);
   });
 }
 
+// Database operations
 async function checkImageExists(
   fileName: string,
 ): Promise<{ url: string; public_id: string } | null> {
@@ -144,6 +168,7 @@ async function checkImageExists(
   }
 }
 
+// General upload
 export async function uploadImageToCloudinary(file: File): Promise<string> {
   const fileName = file.name.replace(/\.[^/.]+$/, "");
   logDebug("开始上传", fileName);
@@ -550,11 +575,13 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   result.total = images.length;
   logDebug(`云端共有 ${images.length} 条记录`);
 
+  // Clean sample images
   const sampleImages = images.filter((img) =>
     isCloudinarySample(img.public_id),
   );
   if (sampleImages.length > 0) {
     logDebug(`发现 ${sampleImages.length} 张示例图片记录`);
+
     for (const img of sampleImages) {
       try {
         const { error: delError } = await supabase
@@ -576,7 +603,31 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     }
   }
 
+  // Check user images
   const userImages = images.filter((img) => !isCloudinarySample(img.public_id));
+
+  // ========== 安全阀：先抽样检测 10 张，如果全部失效则中止 ==========
+  const sampleSize = Math.min(10, userImages.length);
+  if (sampleSize > 0) {
+    const sample = userImages.slice(0, sampleSize);
+    let sampleValid = 0;
+    for (const img of sample) {
+      const valid = await checkImageAccessible(img.url);
+      if (valid) sampleValid++;
+    }
+    if (sampleValid === 0) {
+      logError(
+        "安全警报",
+        `抽样 ${sampleSize} 张全部失效，疑似网络或检测异常，已中止清理`,
+      );
+      throw new Error(
+        `检测到 ${sampleSize}/${sampleSize} 张图片失效，这明显不正常。` +
+          `可能是网络问题或 Cloudinary 暂时不可用。已中止清理，避免误删。请检查网络后重试。`,
+      );
+    }
+  }
+  // ========== 安全阀结束 ==========
+
   const invalidIds: number[] = [];
 
   const BATCH_CHECK_SIZE = 5;
@@ -623,6 +674,81 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   return result;
 }
 
+// ========== 从本地图库恢复 Supabase 记录（不重新上传文件）==========
+export async function restoreCloudRecordsFromLocal(
+  localImages: { src: string; name: string; category?: string }[],
+): Promise<RebuildResult> {
+  const result: RebuildResult = {
+    scanned: localImages.length,
+    cloudUrls: 0,
+    added: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  for (const img of localImages) {
+    if (!img.src || !img.src.includes("res.cloudinary.com")) continue;
+    result.cloudUrls++;
+
+    let publicId: string | null = null;
+    try {
+      const url = new URL(img.src);
+      const pathParts = url.pathname.split("/");
+      const uploadIndex = pathParts.indexOf("upload");
+      if (uploadIndex !== -1 && uploadIndex + 1 < pathParts.length) {
+        let startIdx = uploadIndex + 1;
+        if (pathParts[startIdx]?.startsWith("v")) {
+          startIdx++;
+        }
+        const filePart = pathParts.slice(startIdx).join("/");
+        publicId = filePart.replace(/\.[^/.]+$/, "");
+      }
+    } catch {
+      result.errors.push(`URL 解析失败: ${img.name}`);
+      continue;
+    }
+
+    if (!publicId) {
+      result.errors.push(`无法提取 public_id: ${img.name}`);
+      continue;
+    }
+
+    const { data: existing } = await supabase
+      .from("cloud_images")
+      .select("id")
+      .eq("public_id", publicId)
+      .maybeSingle();
+
+    if (existing) {
+      result.skipped++;
+      continue;
+    }
+
+    const { error } = await supabase.from("cloud_images").insert({
+      name: img.name,
+      url: img.src,
+      public_id: publicId,
+      category:
+        img.category && img.category !== "本地" ? img.category : "cloud",
+    });
+
+    if (error) {
+      result.errors.push(`${img.name}: ${error.message}`);
+    } else {
+      result.added++;
+      logDebug("恢复云端记录", { name: img.name, publicId });
+    }
+
+    // 避免速率限制
+    if (result.added % 5 === 0) {
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+
+  logDebug("记录恢复完成", result);
+  return result;
+}
+
 export function dataUrlToFile(dataUrl: string, fileName: string): File {
   const arr = dataUrl.split(",");
   const mime = arr[0].match(/:(.*?);/)?.[1] || "image/png";
@@ -632,7 +758,8 @@ export function dataUrlToFile(dataUrl: string, fileName: string): File {
   while (n--) {
     u8arr[n] = bstr.charCodeAt(n);
   }
-  return new File([u8arr], `${fileName}.png`, { type: mime });
+  const ext = mime === "image/jpeg" ? "jpg" : "png";
+  return new File([u8arr], `${fileName}.${ext}`, { type: mime });
 }
 
 export async function uploadDataUrlToCloudinary(

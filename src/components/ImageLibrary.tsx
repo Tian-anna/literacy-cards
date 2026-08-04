@@ -13,6 +13,7 @@ import {
   getHanziImages,
   clearAllCloudImages,
   cleanInvalidCloudImages,
+  restoreCloudRecordsFromLocal,
   CleanResult,
   RebuildResult,
 } from "@/utils/cloudinaryApi";
@@ -461,6 +462,36 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
     }
   };
 
+  const handleRestoreCloud = async () => {
+    if (
+      !confirm(
+        `确定从本地图库恢复云端记录吗？\n\n本地共有 ${images.length} 张图片，将自动提取 Cloudinary 链接并重建 Supabase 索引，不会重新上传文件。`,
+      )
+    )
+      return;
+    setIsSyncing(true);
+    try {
+      const result = await restoreCloudRecordsFromLocal(
+        images.map((img) => ({
+          src: img.src,
+          name: img.name,
+          category: img.category,
+        })),
+      );
+      alert(
+        `恢复完成！\n扫描: ${result.scanned}\nCloudinary 链接: ${result.cloudUrls}\n新增记录: ${result.added}\n跳过(已存在): ${result.skipped}` +
+          (result.errors.length > 0
+            ? `\n\n错误 ${result.errors.length} 个:\n${result.errors.slice(0, 5).join("\n")}`
+            : ""),
+      );
+      await fetchCloudCount();
+    } catch (e) {
+      alert("恢复失败: " + (e as Error).message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="h-full flex" style={{ fontSize: "12px" }}>
       <div
@@ -587,6 +618,27 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 </button>
               </div>
 
+              {/* 恢复云端记录 */}
+              <div className="px-2 py-1 border-b border-gray-100">
+                <button
+                  onClick={handleRestoreCloud}
+                  disabled={isSyncing}
+                  className="w-full px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1 text-xs"
+                >
+                  {isSyncing ? (
+                    <>
+                      <span className="animate-spin">↻</span>
+                      <span>恢复中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🔄</span>
+                      <span>恢复云端记录</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
               {/* 同步结果提示 */}
               {lastSyncResult && (
                 <div className="px-2 py-1 bg-green-50 border-b border-green-100 text-green-700 text-xs">
@@ -595,7 +647,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
                 </div>
               )}
 
-              {/* 分类筛选 - 只保留汉字和英文 */}
+              {/* 分类筛选 */}
               <div className="px-2 py-1 border-b border-gray-100">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-gray-500">分类筛选</span>

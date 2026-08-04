@@ -276,7 +276,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       } else {
         drawEnglish(ctx, content, w, h, fontSize, fontFamily);
       }
-      return canvas.toDataURL("image/png", 1.0);
+      return canvas.toDataURL("image/jpeg", 0.92);
     },
     [fontSize, getCurrentFontFamily, drawHanzi, drawEnglish],
   );
