@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { useStore } from "@/store/useStore";
+import pinyin from "pinyin";
 import {
   uploadHanziToCloudinary,
   HanziStyleConfig,
@@ -48,6 +49,20 @@ const BORDER_COLOR = "#e74c3c";
 const GRID_COLOR = "#e74c3c";
 const GRID_LINE_WIDTH = 1;
 const BORDER_LINE_WIDTH = 2;
+
+// ========== 中文转拼音命名（英文保持原样）==========
+function getCloudFileName(char: string): string {
+  // 英文：直接小写
+  if (/^[a-zA-Z]+$/.test(char)) {
+    return char.toLowerCase();
+  }
+  // 中文：转拼音，无声调
+  const py = pinyin(char, {
+    style: pinyin.STYLE_NORMAL, // 不带声调
+    segment: false,
+  });
+  return py.flat().join("").toLowerCase() || char;
+}
 
 const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
   const { addImage } = useStore();
@@ -179,7 +194,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     [gridType, drawGrid, drawBorder],
   );
 
-  // ========== 四线三格（颜色加深）==========
   const drawEnglish = useCallback(
     (
       ctx: CanvasRenderingContext2D,
@@ -193,10 +207,9 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       ctx.fillRect(0, 0, w, h);
       drawBorder(ctx, w, h);
 
-      // 四线三格 - 颜色加深
-      const lineColor = "rgba(231, 76, 60, 0.7)"; // 加深：0.4 → 0.7
-      const midLineColor = "rgba(231, 76, 60, 0.5)"; // 中线稍淡
-      const lineWidth = 1.5; // 加粗：1 → 1.5
+      const lineColor = "rgba(231, 76, 60, 0.7)";
+      const midLineColor = "rgba(231, 76, 60, 0.5)";
+      const lineWidth = 1.5;
       const dashPattern = [6, 4];
 
       const baseLineY = h * 0.65;
@@ -212,7 +225,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       ctx.save();
       ctx.lineWidth = lineWidth;
 
-      // 顶线 - 虚线
       ctx.strokeStyle = lineColor;
       ctx.setLineDash(dashPattern);
       ctx.beginPath();
@@ -220,23 +232,20 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       ctx.lineTo(w, topLineY);
       ctx.stroke();
 
-      // 中线 - 虚线（稍淡）
       ctx.strokeStyle = midLineColor;
       ctx.beginPath();
       ctx.moveTo(0, midLineY);
       ctx.lineTo(w, midLineY);
       ctx.stroke();
 
-      // 基线 - 实线（最粗最明显）
       ctx.setLineDash([]);
-      ctx.strokeStyle = "rgba(231, 76, 60, 0.85)"; // 最深
+      ctx.strokeStyle = "rgba(231, 76, 60, 0.85)";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(0, baseLine);
       ctx.lineTo(w, baseLine);
       ctx.stroke();
 
-      // 降部线 - 虚线
       ctx.lineWidth = lineWidth;
       ctx.strokeStyle = lineColor;
       ctx.setLineDash(dashPattern);
@@ -247,7 +256,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
       ctx.restore();
 
-      // 英文单词
       ctx.fillStyle = "#000000";
       ctx.font = `${fontSize}px ${fontFamily}`;
       ctx.textAlign = "center";
@@ -276,6 +284,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       } else {
         drawEnglish(ctx, content, w, h, fontSize, fontFamily);
       }
+      // ========== 改为 JPEG 格式，质量 0.92 ==========
       return canvas.toDataURL("image/jpeg", 0.92);
     },
     [fontSize, getCurrentFontFamily, drawHanzi, drawEnglish],
@@ -329,11 +338,15 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         const tempId = `word-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         let finalSrc = dataUrl;
 
+        // ========== 生成拼音/英文文件名 ==========
+        const fileName = getCloudFileName(content);
+
         if (uploadToCloud) {
           try {
             finalSrc = await uploadHanziToCloudinary(
               dataUrl,
-              content,
+              content, // 原始字符，用于数据库 name 字段
+              fileName, // 拼音/英文，用于 Cloudinary public_id
               styleConfig,
             );
           } catch (error) {
@@ -341,7 +354,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
           }
         }
 
-        // ========== 修复：英文单词正确分类 ==========
         addImage({
           src: finalSrc,
           name: content,
@@ -423,7 +435,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
       {isExpanded && (
         <div className="px-2 pb-1.5 space-y-1">
-          {/* ========== 修复：placeholder 显示中文提示 ========== */}
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -533,7 +544,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             </div>
           )}
 
-          {/* ========== 修复：按钮尺寸缩小 ========== */}
           <div className="flex gap-1">
             <button
               onClick={() => handleCreate("library")}

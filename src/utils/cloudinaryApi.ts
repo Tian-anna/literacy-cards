@@ -10,7 +10,6 @@ const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const GITHUB_REPO =
   import.meta.env.VITE_GITHUB_REPO || "Tian-anna/literacy-cards";
 
-// Debug tools
 function logDebug(label: string, data?: any) {
   console.log(`[CloudAPI] ${label}`, data || "");
 }
@@ -19,7 +18,6 @@ function logError(label: string, error: any) {
   console.error(`[CloudAPI] ${label}:`, error);
 }
 
-// File conversion
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -39,7 +37,6 @@ async function getFileSha(path: string): Promise<string> {
   return data.sha;
 }
 
-// GitHub upload/delete
 export async function uploadImageToGitHub(file: File): Promise<string> {
   const base64 = await fileToBase64(file);
   const content = base64.split(",")[1];
@@ -84,7 +81,6 @@ export async function deleteImageFromGitHub(fileName: string): Promise<void> {
   }
 }
 
-// Cloudinary sample filter
 export function isCloudinarySample(publicId: string): boolean {
   if (!publicId) return false;
   const lower = publicId.toLowerCase();
@@ -146,7 +142,6 @@ export function checkImageAccessible(url: string): Promise<boolean> {
   });
 }
 
-// Database operations
 async function checkImageExists(
   fileName: string,
 ): Promise<{ url: string; public_id: string } | null> {
@@ -168,7 +163,6 @@ async function checkImageExists(
   }
 }
 
-// General upload
 export async function uploadImageToCloudinary(file: File): Promise<string> {
   const fileName = file.name.replace(/\.[^/.]+$/, "");
   logDebug("开始上传", fileName);
@@ -229,14 +223,16 @@ export interface HanziStyleConfig {
   fontFamily: string;
 }
 
+// ========== 修改：增加 fileName 参数（拼音/英文）==========
 export async function uploadHanziToCloudinary(
   dataUrl: string,
-  char: string,
+  char: string, // 原始字符，用于数据库 name 字段
+  fileName: string, // 拼音/英文，用于 public_id 和文件名
   styleConfig: HanziStyleConfig,
 ): Promise<string> {
   const timestamp = Date.now();
   const styleTag = `${styleConfig.gridType}_${styleConfig.fontSize}`;
-  const publicId = `hanzi_${char}_${styleTag}_${timestamp}`;
+  const publicId = `hanzi_${fileName}_${styleTag}_${timestamp}`;
   const file = dataUrlToFile(dataUrl, publicId);
 
   const isEnglish = /^[a-zA-Z]+$/.test(char);
@@ -480,7 +476,6 @@ export async function getCloudinaryImageCount(): Promise<CloudCountResult> {
   }
 }
 
-// 已移除 Netlify 后端调用，仅删除 Supabase 数据库记录
 export async function deleteCloudImage(public_id: string): Promise<boolean> {
   if (isCloudinarySample(public_id)) {
     logDebug("无法删除示例图片", public_id);
@@ -575,13 +570,11 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   result.total = images.length;
   logDebug(`云端共有 ${images.length} 条记录`);
 
-  // Clean sample images
   const sampleImages = images.filter((img) =>
     isCloudinarySample(img.public_id),
   );
   if (sampleImages.length > 0) {
     logDebug(`发现 ${sampleImages.length} 张示例图片记录`);
-
     for (const img of sampleImages) {
       try {
         const { error: delError } = await supabase
@@ -603,10 +596,8 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     }
   }
 
-  // Check user images
   const userImages = images.filter((img) => !isCloudinarySample(img.public_id));
 
-  // ========== 安全阀：先抽样检测 10 张，如果全部失效则中止 ==========
   const sampleSize = Math.min(10, userImages.length);
   if (sampleSize > 0) {
     const sample = userImages.slice(0, sampleSize);
@@ -626,7 +617,6 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
       );
     }
   }
-  // ========== 安全阀结束 ==========
 
   const invalidIds: number[] = [];
 
@@ -650,7 +640,6 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
     }
   }
 
-  // 仅删除 Supabase 记录，不再调用 Netlify 删除 Cloudinary 文件
   for (const id of invalidIds) {
     try {
       const { error: delError } = await supabase
@@ -673,7 +662,6 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   logDebug("清理完成", result);
   return result;
 }
-
 // ========== 从本地图库恢复 Supabase 记录（不重新上传文件）==========
 export async function restoreCloudRecordsFromLocal(
   localImages: { src: string; name: string; category?: string }[],
@@ -736,19 +724,16 @@ export async function restoreCloudRecordsFromLocal(
       result.errors.push(`${img.name}: ${error.message}`);
     } else {
       result.added++;
-      logDebug("恢复云端记录", { name: img.name, publicId });
     }
 
-    // 避免速率限制
     if (result.added % 5 === 0) {
       await new Promise((r) => setTimeout(r, 300));
     }
   }
 
-  logDebug("记录恢复完成", result);
   return result;
 }
-
+// ========== 修改：根据 MIME 类型自动选择后缀 ==========
 export function dataUrlToFile(dataUrl: string, fileName: string): File {
   const arr = dataUrl.split(",");
   const mime = arr[0].match(/:(.*?);/)?.[1] || "image/png";
@@ -758,7 +743,16 @@ export function dataUrlToFile(dataUrl: string, fileName: string): File {
   while (n--) {
     u8arr[n] = bstr.charCodeAt(n);
   }
-  const ext = mime === "image/jpeg" ? "jpg" : "png";
+
+  let ext = "png";
+  if (mime === "image/jpeg" || mime === "image/jpg") {
+    ext = "jpg";
+  } else if (mime === "image/webp") {
+    ext = "webp";
+  } else if (mime === "image/gif") {
+    ext = "gif";
+  }
+
   return new File([u8arr], `${fileName}.${ext}`, { type: mime });
 }
 

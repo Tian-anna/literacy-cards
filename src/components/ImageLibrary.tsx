@@ -6,7 +6,7 @@ import React, {
   useMemo,
 } from "react";
 import { useStore } from "@/store/useStore";
-import { CardImage } from "@/types";
+import pinyin from "pinyin";
 import {
   getCloudinaryImages,
   getCloudinaryImageCount,
@@ -205,13 +205,34 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
       result = result.filter((img) => img.category === selectedCategory);
     }
 
+    // ========== 修改：支持拼音搜索 ==========
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(
-        (img) =>
-          img.name.toLowerCase().includes(term) ||
-          (img.category && img.category.toLowerCase().includes(term)),
-      );
+      const term = searchTerm.toLowerCase().trim();
+      result = result.filter((img) => {
+        const nameLower = img.name.toLowerCase();
+        // 1. 原始名称直接匹配（中文、英文）
+        if (nameLower.includes(term)) return true;
+
+        // 2. 拼音匹配：将图片名称转为拼音后匹配
+        // 例如输入 "ai" 可以匹配到 "爱"
+        try {
+          const namePinyin = pinyin(img.name, {
+            style: pinyin.STYLE_NORMAL,
+            segment: false,
+          })
+            .flat()
+            .join("")
+            .toLowerCase();
+          if (namePinyin.includes(term)) return true;
+        } catch {
+          // 如果 pinyin 转换失败，忽略
+        }
+
+        // 3. 分类名匹配（保留原有逻辑）
+        if (img.category?.toLowerCase().includes(term)) return true;
+
+        return false;
+      });
     }
 
     if (sortBy === "name") {
@@ -757,7 +778,7 @@ const ImageLibrary: React.FC<ImageLibraryProps> = ({
               <div className="px-2 py-1 border-b border-gray-100">
                 <input
                   type="text"
-                  placeholder="搜索图片..."
+                  placeholder="搜索图片...（支持拼音）"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
