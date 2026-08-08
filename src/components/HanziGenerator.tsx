@@ -1,6 +1,12 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { useStore } from "@/store/useStore";
-import pinyin from "pinyin";
+// 改为：兼容生产构建的导入
+import pinyinModule from "pinyin";
+const pinyin = (
+  typeof pinyinModule === "function"
+    ? pinyinModule
+    : (pinyinModule as any).default || (pinyinModule as any)
+) as typeof pinyinModule;
 import {
   uploadHanziToCloudinary,
   HanziStyleConfig,
