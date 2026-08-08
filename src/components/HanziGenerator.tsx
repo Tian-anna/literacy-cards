@@ -42,8 +42,9 @@ const ENGLISH_FONTS = [
 
 const HANZI_WIDTH = 493;
 const HANZI_HEIGHT = 563;
-const ENGLISH_WIDTH = 986;
 const ENGLISH_HEIGHT = 563;
+const ENGLISH_MIN_WIDTH = 400;
+const ENGLISH_PADDING = 80;
 
 const BORDER_COLOR = "#e74c3c";
 const GRID_COLOR = "#e74c3c";
@@ -198,11 +199,23 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     (
       ctx: CanvasRenderingContext2D,
       word: string,
-      w: number,
-      h: number,
       fontSize: number,
       fontFamily: string,
-    ) => {
+    ): { width: number; height: number } => {
+      // 先测量文本宽度
+      ctx.font = `${fontSize}px ${fontFamily}`;
+      const metrics = ctx.measureText(word);
+      const textWidth = metrics.width;
+      const w = Math.max(
+        ENGLISH_MIN_WIDTH,
+        Math.ceil(textWidth + ENGLISH_PADDING * 2),
+      );
+      const h = ENGLISH_HEIGHT;
+
+      // 动态设置 canvas 尺寸
+      ctx.canvas.width = w;
+      ctx.canvas.height = h;
+
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, w, h);
       drawBorder(ctx, w, h);
@@ -261,31 +274,54 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       ctx.textAlign = "center";
       ctx.textBaseline = "alphabetic";
       ctx.fillText(word, w / 2, baseLine);
+
+      return { width: w, height: h };
     },
     [drawBorder],
   );
 
   const generateImage = useCallback(
-    (content: string, type: ContentType): string | null => {
+    (
+      content: string,
+      type: ContentType,
+    ): { dataUrl: string; width: number; height: number } | null => {
       if (!content) return null;
       const isHanzi = type === "hanzi";
-      const w = isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH;
-      const h = isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT;
 
       const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
       const ctx = canvas.getContext("2d");
       if (!ctx) return null;
 
       const fontFamily = getCurrentFontFamily(type);
       if (isHanzi) {
-        drawHanzi(ctx, content, w, h, fontSize, fontFamily);
+        canvas.width = HANZI_WIDTH;
+        canvas.height = HANZI_HEIGHT;
+        drawHanzi(
+          ctx,
+          content,
+          HANZI_WIDTH,
+          HANZI_HEIGHT,
+          fontSize,
+          fontFamily,
+        );
+        return {
+          dataUrl: canvas.toDataURL("image/jpeg", 0.92),
+          width: HANZI_WIDTH,
+          height: HANZI_HEIGHT,
+        };
       } else {
-        drawEnglish(ctx, content, w, h, fontSize, fontFamily);
+        const { width, height } = drawEnglish(
+          ctx,
+          content,
+          fontSize,
+          fontFamily,
+        );
+        return {
+          dataUrl: canvas.toDataURL("image/jpeg", 0.92),
+          width,
+          height,
+        };
       }
-      // ========== 改为 JPEG 格式，质量 0.92 ==========
-      return canvas.toDataURL("image/jpeg", 0.92);
     },
     [fontSize, getCurrentFontFamily, drawHanzi, drawEnglish],
   );
@@ -295,13 +331,14 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     if (contents.length === 0) return null;
     const firstContent = contents[0];
     const type = detectContentType(inputText);
-    const dataUrl = generateImage(firstContent, type);
+    const result = generateImage(firstContent, type);
+    if (!result) return null;
     return {
       content: firstContent,
       type,
-      dataUrl,
-      width: type === "hanzi" ? HANZI_WIDTH : ENGLISH_WIDTH,
-      height: type === "hanzi" ? HANZI_HEIGHT : ENGLISH_HEIGHT,
+      dataUrl: result.dataUrl,
+      width: result.width,
+      height: result.height,
     };
   }, [inputText, parseInput, detectContentType, generateImage]);
 
@@ -315,8 +352,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
       const contentType = detectContentType(inputText);
       const isHanzi = contentType === "hanzi";
-      const imgWidth = isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH;
-      const imgHeight = isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT;
 
       setIsUploading(true);
       setUploadProgress({ current: 0, total: contents.length });
@@ -332,11 +367,13 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       const uploadedIds: string[] = [];
       for (let i = 0; i < contents.length; i++) {
         const content = contents[i];
-        const dataUrl = generateImage(content, contentType);
-        if (!dataUrl) continue;
+        const result = generateImage(content, contentType);
+        if (!result) continue;
 
         const tempId = `word-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        let finalSrc = dataUrl;
+        let finalSrc = result.dataUrl;
+        const imgWidth = result.width;
+        const imgHeight = result.height;
 
         // ========== 生成拼音/英文文件名 ==========
         const fileName = getCloudFileName(content);
@@ -344,7 +381,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         if (uploadToCloud) {
           try {
             finalSrc = await uploadHanziToCloudinary(
-              dataUrl,
+              result.dataUrl,
               content, // 原始字符，用于数据库 name 字段
               fileName, // 拼音/英文，用于 Cloudinary public_id
               styleConfig,
@@ -377,7 +414,8 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       } else if (contents.length > 1) {
         const store = useStore.getState();
         const cols = Math.ceil(Math.sqrt(contents.length));
-        const gap = isHanzi ? 160 : 320;
+        const firstResult = generateImage(contents[0], contentType);
+        const gap = (firstResult?.width ?? (isHanzi ? 493 : 600)) + 40;
         const startX = 100,
           startY = 100;
         uploadedIds.forEach((id, idx) =>
@@ -475,7 +513,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             <input
               type="range"
               min="40"
-              max={isHanziMode ? 400 : 200}
+              max={400}
               value={fontSize}
               onChange={(e) => setFontSize(Number(e.target.value))}
               className="flex-1 h-1 accent-green-500"
