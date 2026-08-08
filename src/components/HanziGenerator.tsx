@@ -50,18 +50,20 @@ const GRID_COLOR = "#e74c3c";
 const GRID_LINE_WIDTH = 1;
 const BORDER_LINE_WIDTH = 2;
 
-// ========== 中文转拼音命名（英文保持原样）==========
 function getCloudFileName(char: string): string {
-  // 英文：直接小写
   if (/^[a-zA-Z]+$/.test(char)) {
     return char.toLowerCase();
   }
-  // 中文：转拼音，无声调
   const py = pinyin(char, {
-    style: pinyin.STYLE_NORMAL, // 不带声调
+    style: pinyin.STYLE_NORMAL,
     segment: false,
   });
   return py.flat().join("").toLowerCase() || char;
+}
+
+// ========== 让出主线程，避免 UI 卡死 ==========
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
@@ -284,7 +286,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       } else {
         drawEnglish(ctx, content, w, h, fontSize, fontFamily);
       }
-      // ========== 改为 JPEG 格式，质量 0.92 ==========
       return canvas.toDataURL("image/jpeg", 0.92);
     },
     [fontSize, getCurrentFontFamily, drawHanzi, drawEnglish],
@@ -313,6 +314,17 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         return;
       }
 
+      // 大量生成时给出确认提示
+      if (contents.length > 100) {
+        if (
+          !confirm(
+            `即将生成 ${contents.length} 张图片，这可能需要一些时间，继续吗？`,
+          )
+        ) {
+          return;
+        }
+      }
+
       const contentType = detectContentType(inputText);
       const isHanzi = contentType === "hanzi";
       const imgWidth = isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH;
@@ -335,26 +347,28 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         const dataUrl = generateImage(content, contentType);
         if (!dataUrl) continue;
 
-        const tempId = `word-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        // ========== 修复：生成确定性的唯一 ID ==========
+        const tempId = `word-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`;
         let finalSrc = dataUrl;
-
-        // ========== 生成拼音/英文文件名 ==========
         const fileName = getCloudFileName(content);
 
         if (uploadToCloud) {
           try {
             finalSrc = await uploadHanziToCloudinary(
               dataUrl,
-              content, // 原始字符，用于数据库 name 字段
-              fileName, // 拼音/英文，用于 Cloudinary public_id
+              content,
+              fileName,
               styleConfig,
             );
           } catch (error) {
-            alert(`"${content}" 云端上传失败，已保存本地`);
+            console.warn(`"${content}" 云端上传失败，已保存本地`, error);
+            // 不上 alert，避免 687 次弹窗卡死
           }
         }
 
-        addImage({
+        // ========== 修复：传入自定义 id，并接收返回的实际 id ==========
+        const actualId = addImage({
+          id: tempId, // ← 关键：传入自定义 id
           src: finalSrc,
           name: content,
           category: isHanzi ? "汉字" : "英文",
@@ -362,9 +376,21 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
           height: imgHeight,
         });
 
-        uploadedIds.push(tempId);
+        // 如果 store 返回了 id 就用返回的，否则用 tempId
+        const imageId = actualId || tempId;
+        uploadedIds.push(imageId);
+
         setUploadProgress({ current: i + 1, total: contents.length });
-        if (mode === "canvas" && contents.length === 1) onAddToCanvas?.(tempId);
+
+        // 单字直接拼图模式
+        if (mode === "canvas" && contents.length === 1) {
+          onAddToCanvas?.(imageId);
+        }
+
+        // ========== 修复：每 5 个字让出主线程，防止 UI 卡死 ==========
+        if ((i + 1) % 5 === 0) {
+          await yieldToMain();
+        }
       }
 
       setIsUploading(false);

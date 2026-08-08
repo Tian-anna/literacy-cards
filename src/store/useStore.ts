@@ -65,7 +65,10 @@ export const checkStorage = async () => {
 // ==================== Store 接口 ====================
 interface StoreState {
   images: CardImage[];
-  addImage: (image: Omit<CardImage, "id" | "createdAt">) => void;
+  // ========== 修改：支持传入自定义 id，并返回实际 id ==========
+  addImage: (
+    image: Omit<CardImage, "id" | "createdAt"> & { id?: string },
+  ) => string;
   removeImage: (id: string) => void;
 
   scenes: Scene[];
@@ -232,7 +235,9 @@ export const useStore = create<StoreState>()(
           ),
         })),
 
+      // ========== 修改：支持传入自定义 id，并返回实际 id ==========
       addImage: (image) => {
+        const id = image.id || crypto.randomUUID();
         set((state: StoreState) => {
           const exists = state.images.some(
             (img) => img.src === image.src || img.name === image.name,
@@ -246,13 +251,14 @@ export const useStore = create<StoreState>()(
               ...state.images,
               {
                 ...image,
-                id: crypto.randomUUID(),
+                id,
                 createdAt: Date.now(),
                 category: image.category || "未分类",
               } as CardImage,
             ],
           };
         });
+        return id;
       },
 
       removeImage: (id) =>
