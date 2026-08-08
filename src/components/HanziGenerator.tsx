@@ -97,7 +97,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [syncingCount, setSyncingCount] = useState(0);
 
-  // ========== 修复：按钮防重（useRef 立即锁定）==========
+  // 按钮防重
   const isSubmittingRef = useRef(false);
 
   const detectContentType = useCallback((text: string): ContentType => {
@@ -323,47 +323,8 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     };
   }, [inputText, parseInput, detectContentType, generateImage]);
 
-  // 后台静默同步云端
-  const syncToCloudInBackground = useCallback(
-    async (
-      imageId: string,
-      dataUrl: string,
-      content: string,
-      styleConfig: HanziStyleConfig,
-    ) => {
-      setSyncingCount((c) => c + 1);
-      console.log(`[Sync] 开始上传 "${content}"...`);
-      try {
-        const fileName = getCloudFileName(content);
-        const cloudUrl = await uploadHanziToCloudinary(
-          dataUrl,
-          content,
-          fileName,
-          styleConfig,
-        );
-
-        console.log(`[Sync] "${content}" 上传成功:`, cloudUrl);
-
-        const { updateImage } = useStore.getState();
-        if (updateImage) {
-          updateImage(imageId, { src: cloudUrl });
-        } else {
-          const store = useStore.getState();
-          const img = store.images.find((i) => i.id === imageId);
-          if (img) img.src = cloudUrl;
-        }
-      } catch (error) {
-        console.error(`[Sync] "${content}" 上传失败:`, error);
-      } finally {
-        setSyncingCount((c) => Math.max(0, c - 1));
-      }
-    },
-    [],
-  );
-
   const handleCreate = useCallback(
     async (mode: "library" | "canvas") => {
-      // ========== 修复1：按钮防重（useRef 立即锁定，无视 React 渲染延迟）==========
       if (isSubmittingRef.current) return;
       isSubmittingRef.current = true;
 
@@ -372,10 +333,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         if (contents.length === 0) {
           alert("请输入汉字或英文单词");
           return;
-        }
-
-        if (contents.length > 100) {
-          if (!confirm(`即将生成 ${contents.length} 张图片，继续吗？`)) return;
         }
 
         const contentType = detectContentType(inputText);
@@ -397,7 +354,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         const uploadedIds: string[] = [];
         const store = useStore.getState();
 
-        // ========== 修复2：本次 batch 内去重（输入"我我我"只处理一次）==========
+        // 本次 batch 内去重
         const processedInBatch = new Map<string, string>();
 
         for (let i = 0; i < contents.length; i++) {
@@ -415,7 +372,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             continue;
           }
 
-          // ========== 修复3：本地图库查重（跨 session，清空后也能防重）==========
+          // 本地图库查重
           const existingLocal = store.images.find(
             (img) =>
               img.name === content &&
@@ -456,14 +413,41 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
             onAddToCanvas?.(imageId);
           }
 
-          // 后台同步云端（不 await，不阻塞 UI）
+          // ========== 关键修复：串行上传，一个一个来，上传完立即释放 base64 ==========
           if (uploadToCloud) {
-            syncToCloudInBackground(imageId, dataUrl, content, styleConfig);
+            setSyncingCount((c) => c + 1);
+            try {
+              const fileName = getCloudFileName(content);
+              const cloudUrl = await uploadHanziToCloudinary(
+                dataUrl,
+                content,
+                fileName,
+                styleConfig,
+              );
+
+              console.log(`[Sync] "${content}" 上传成功`);
+
+              // 立即替换为云端 URL，释放 base64 内存
+              const { updateImage } = useStore.getState();
+              if (updateImage) {
+                updateImage(imageId, { src: cloudUrl });
+              } else {
+                const store2 = useStore.getState();
+                const img = store2.images.find((i) => i.id === imageId);
+                if (img) img.src = cloudUrl;
+              }
+            } catch (error) {
+              console.error(`[Sync] "${content}" 上传失败:`, error);
+              // 失败时保留 base64，不阻塞后续
+            } finally {
+              setSyncingCount((c) => Math.max(0, c - 1));
+            }
           }
 
           setUploadProgress({ current: i + 1, total: contents.length });
 
-          if ((i + 1) % 5 === 0) {
+          // 每处理 3 个让出主线程，防止 UI 完全卡死
+          if ((i + 1) % 3 === 0) {
             await yieldToMain();
           }
         }
@@ -473,8 +457,8 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
         if (mode === "library") {
           console.log(
-            `${contents.length} 个${isHanzi ? "汉字" : "单词"}已保存本地` +
-              (uploadToCloud ? "，云端同步后台进行中..." : ""),
+            `${contents.length} 个${isHanzi ? "汉字" : "单词"}已处理完成` +
+              (uploadToCloud ? "（含云端同步）" : ""),
           );
         } else if (contents.length > 1) {
           const cols = Math.ceil(Math.sqrt(contents.length));
@@ -492,7 +476,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
         setInputText("");
       } finally {
-        // 释放锁定
         isSubmittingRef.current = false;
         setIsProcessing(false);
       }
@@ -508,7 +491,6 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       uploadToCloud,
       addImage,
       onAddToCanvas,
-      syncToCloudInBackground,
     ],
   );
 
@@ -615,7 +597,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
               ☁️ 同步云端
               {syncingCount > 0 && (
                 <span className="text-orange-500 ml-1">
-                  (同步中 {syncingCount}...)
+                  (上传中 {syncingCount}...)
                 </span>
               )}
             </span>
@@ -646,6 +628,11 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
                 <span>
                   处理中 {uploadProgress.current}/{uploadProgress.total}
                 </span>
+                {syncingCount > 0 && (
+                  <span className="text-orange-500">
+                    正在上传第 {syncingCount} 个...
+                  </span>
+                )}
               </div>
               <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
                 <div
@@ -664,7 +651,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
               disabled={contents.length === 0 || isProcessing}
               className="flex-1 py-1 bg-blue-500 text-white rounded text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
             >
-              {isProcessing ? "..." : "加入图库"}
+              {isProcessing ? "处理中..." : "加入图库"}
             </button>
             <button
               onClick={() => handleCreate("canvas")}
@@ -672,7 +659,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
               className="flex-1 py-1 bg-green-500 text-white rounded text-xs font-medium hover:bg-green-600 disabled:opacity-50"
             >
               {isProcessing
-                ? "..."
+                ? "处理中..."
                 : contents.length > 1
                   ? "批量拼图"
                   : "直接拼图"}
