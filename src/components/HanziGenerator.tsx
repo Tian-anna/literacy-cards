@@ -61,13 +61,13 @@ function getCloudFileName(char: string): string {
   return py.flat().join("").toLowerCase() || char;
 }
 
-// ========== 让出主线程，避免 UI 卡死 ==========
+// 让出主线程
 function yieldToMain(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
-  const { addImage } = useStore();
+  const { addImage, updateImage } = useStore(); // 假设 store 有 updateImage，如果没有见下方备选方案
   const [inputText, setInputText] = useState("");
   const [gridType, setGridType] = useState<GridType>("tian");
   const [fontSize, setFontSize] = useState(280);
@@ -75,13 +75,16 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
   const [englishFontFamily, setEnglishFontFamily] = useState(
     ENGLISH_FONTS[0].value,
   );
-  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [uploadToCloud, setUploadToCloud] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<{
     current: number;
     total: number;
   } | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
+
+  // 后台同步状态
+  const [syncingCount, setSyncingCount] = useState(0);
 
   const detectContentType = useCallback((text: string): ContentType => {
     const trimmed = text.trim();
@@ -306,6 +309,46 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     };
   }, [inputText, parseInput, detectContentType, generateImage]);
 
+  // ========== 核心优化：后台静默同步云端 ==========
+  const syncToCloudInBackground = useCallback(
+    async (
+      imageId: string,
+      dataUrl: string,
+      content: string,
+      styleConfig: HanziStyleConfig,
+    ) => {
+      setSyncingCount((c) => c + 1);
+      try {
+        const fileName = getCloudFileName(content);
+        const cloudUrl = await uploadHanziToCloudinary(
+          dataUrl,
+          content,
+          fileName,
+          styleConfig,
+        );
+
+        // 上传成功后，更新本地图片为云端 URL
+        // 方案A：如果 store 有 updateImage
+        const { updateImage } = useStore.getState();
+        if (updateImage) {
+          updateImage(imageId, { src: cloudUrl });
+        } else {
+          // 方案B：手动替换（备选）
+          const store = useStore.getState();
+          const img = store.images.find((i) => i.id === imageId);
+          if (img) {
+            img.src = cloudUrl;
+          }
+        }
+      } catch (error) {
+        console.warn(`"${content}" 云端同步失败，保留本地版本`, error);
+      } finally {
+        setSyncingCount((c) => Math.max(0, c - 1));
+      }
+    },
+    [],
+  );
+
   const handleCreate = useCallback(
     async (mode: "library" | "canvas") => {
       const contents = parseInput(inputText);
@@ -314,13 +357,8 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
         return;
       }
 
-      // 大量生成时给出确认提示
       if (contents.length > 100) {
-        if (
-          !confirm(
-            `即将生成 ${contents.length} 张图片，这可能需要一些时间，继续吗？`,
-          )
-        ) {
+        if (!confirm(`即将生成 ${contents.length} 张图片，继续吗？`)) {
           return;
         }
       }
@@ -330,7 +368,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       const imgWidth = isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH;
       const imgHeight = isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT;
 
-      setIsUploading(true);
+      setIsProcessing(true);
       setUploadProgress({ current: 0, total: contents.length });
 
       const styleConfig: HanziStyleConfig = {
@@ -342,63 +380,53 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       };
 
       const uploadedIds: string[] = [];
+
       for (let i = 0; i < contents.length; i++) {
         const content = contents[i];
         const dataUrl = generateImage(content, contentType);
         if (!dataUrl) continue;
 
-        // ========== 修复：生成确定性的唯一 ID ==========
         const tempId = `word-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`;
-        let finalSrc = dataUrl;
-        const fileName = getCloudFileName(content);
 
-        if (uploadToCloud) {
-          try {
-            finalSrc = await uploadHanziToCloudinary(
-              dataUrl,
-              content,
-              fileName,
-              styleConfig,
-            );
-          } catch (error) {
-            console.warn(`"${content}" 云端上传失败，已保存本地`, error);
-            // 不上 alert，避免 687 次弹窗卡死
-          }
-        }
-
-        // ========== 修复：传入自定义 id，并接收返回的实际 id ==========
+        // ========== 关键优化：先本地立即入库，用户立刻可用 ==========
         const actualId = addImage({
-          id: tempId, // ← 关键：传入自定义 id
-          src: finalSrc,
+          id: tempId,
+          src: dataUrl, // 先用本地 base64，瞬间完成
           name: content,
           category: isHanzi ? "汉字" : "英文",
           width: imgWidth,
           height: imgHeight,
         });
 
-        // 如果 store 返回了 id 就用返回的，否则用 tempId
         const imageId = actualId || tempId;
         uploadedIds.push(imageId);
 
-        setUploadProgress({ current: i + 1, total: contents.length });
-
-        // 单字直接拼图模式
+        // 单字直接拼图 —— 立刻放到画布，不等待网络
         if (mode === "canvas" && contents.length === 1) {
           onAddToCanvas?.(imageId);
         }
 
-        // ========== 修复：每 5 个字让出主线程，防止 UI 卡死 ==========
+        // ========== 关键优化：云端同步改为后台异步，不阻塞 UI ==========
+        if (uploadToCloud) {
+          // 不 await！让它后台跑
+          syncToCloudInBackground(imageId, dataUrl, content, styleConfig);
+        }
+
+        setUploadProgress({ current: i + 1, total: contents.length });
+
         if ((i + 1) % 5 === 0) {
           await yieldToMain();
         }
       }
 
-      setIsUploading(false);
+      setIsProcessing(false);
       setUploadProgress(null);
 
       if (mode === "library") {
-        alert(
-          `${contents.length} 个${isHanzi ? "汉字" : "单词"}已${uploadToCloud ? "同步云端" : "保存本地"}`,
+        // 不再弹 alert，避免打断用户
+        console.log(
+          `${contents.length} 个${isHanzi ? "汉字" : "单词"}已保存本地` +
+            (uploadToCloud ? "，云端同步后台进行中..." : ""),
         );
       } else if (contents.length > 1) {
         const store = useStore.getState();
@@ -428,6 +456,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       uploadToCloud,
       addImage,
       onAddToCanvas,
+      syncToCloudInBackground,
     ],
   );
 
@@ -530,7 +559,14 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
               onChange={(e) => setUploadToCloud(e.target.checked)}
               className="w-3 h-3 accent-green-500"
             />
-            <span className="text-gray-500 text-xs">☁️ 同步云端</span>
+            <span className="text-gray-500 text-xs">
+              ☁️ 同步云端
+              {syncingCount > 0 && (
+                <span className="text-orange-500 ml-1">
+                  (同步中 {syncingCount}...)
+                </span>
+              )}
+            </span>
           </label>
 
           {previewInfo?.dataUrl && (
@@ -573,17 +609,17 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
           <div className="flex gap-1">
             <button
               onClick={() => handleCreate("library")}
-              disabled={contents.length === 0 || isUploading}
+              disabled={contents.length === 0 || isProcessing}
               className="flex-1 py-1 bg-blue-500 text-white rounded text-xs font-medium hover:bg-blue-600 disabled:opacity-50"
             >
-              {isUploading ? "..." : "加入图库"}
+              {isProcessing ? "..." : "加入图库"}
             </button>
             <button
               onClick={() => handleCreate("canvas")}
-              disabled={contents.length === 0 || isUploading}
+              disabled={contents.length === 0 || isProcessing}
               className="flex-1 py-1 bg-green-500 text-white rounded text-xs font-medium hover:bg-green-600 disabled:opacity-50"
             >
-              {isUploading
+              {isProcessing
                 ? "..."
                 : contents.length > 1
                   ? "批量拼图"

@@ -69,6 +69,7 @@ interface StoreState {
   addImage: (
     image: Omit<CardImage, "id" | "createdAt"> & { id?: string },
   ) => string;
+  updateImage: (id: string, updates: Partial<CardImage>) => void; // ← 加这里
   removeImage: (id: string) => void;
 
   scenes: Scene[];
@@ -260,7 +261,13 @@ export const useStore = create<StoreState>()(
         });
         return id;
       },
-
+      // ← 在这里插入 updateImage
+      updateImage: (id, updates) =>
+        set((state: StoreState) => ({
+          images: state.images.map((img) =>
+            img.id === id ? { ...img, ...updates } : img,
+          ),
+        })),
       removeImage: (id) =>
         set((state: StoreState) => ({
           images: state.images.filter((img) => img.id !== id),
