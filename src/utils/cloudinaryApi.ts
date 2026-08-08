@@ -5,10 +5,8 @@ import { supabase } from "./supabase";
 const CLOUD_NAME = "kqcvg4iw";
 const UPLOAD_PRESET = "literacy-cards";
 
-// GitHub storage config
-const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
-const GITHUB_REPO =
-  import.meta.env.VITE_GITHUB_REPO || "Tian-anna/literacy-cards";
+// ========== 全局上传锁：防止同一个字并发重复上传 ==========
+const uploadingLocks = new Map<string, Promise<string>>();
 
 // Debug tools
 function logDebug(label: string, data?: any) {
@@ -17,71 +15,6 @@ function logDebug(label: string, data?: any) {
 
 function logError(label: string, error: any) {
   console.error(`[CloudAPI] ${label}:`, error);
-}
-
-// File conversion
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-async function getFileSha(path: string): Promise<string> {
-  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `token ${GITHUB_TOKEN}` },
-  });
-  if (!res.ok) throw new Error("获取文件信息失败");
-  const data = await res.json();
-  return data.sha;
-}
-
-// GitHub upload/delete
-export async function uploadImageToGitHub(file: File): Promise<string> {
-  const base64 = await fileToBase64(file);
-  const content = base64.split(",")[1];
-  const path = `images/${Date.now()}_${file.name}`;
-  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
-
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: {
-      Authorization: `token ${GITHUB_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ message: "添加图片", content }),
-  });
-
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || "上传失败");
-  }
-  const data = await res.json();
-  return data.content.download_url;
-}
-
-export async function deleteImageFromGitHub(fileName: string): Promise<void> {
-  const path = `images/${fileName}`;
-  try {
-    const sha = await getFileSha(path);
-    const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
-    const res = await fetch(url, {
-      method: "DELETE",
-      headers: {
-        Authorization: `token ${GITHUB_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ message: "删除图片", sha }),
-    });
-    if (!res.ok) throw new Error("删除失败");
-    logDebug("已删除 GitHub 文件", fileName);
-  } catch (error) {
-    logError("删除 GitHub 文件失败", error);
-    throw error;
-  }
 }
 
 // Cloudinary sample filter
@@ -102,7 +35,7 @@ export function filterOutSamples<T extends { public_id?: string }>(
   return images.filter((img) => !isCloudinarySample(img.public_id || ""));
 }
 
-// ========== 修复：Safari 使用 fetch HEAD 检测，避免 CORS 误判 ==========
+// Safari 使用 fetch HEAD 检测，避免 CORS 误判
 export function checkImageAccessible(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     if (!url || !url.startsWith("http")) {
@@ -110,13 +43,11 @@ export function checkImageAccessible(url: string): Promise<boolean> {
       return;
     }
 
-    // 检测是否为 Safari（包括 iPad Safari）
     const isSafari =
       /^((?!chrome|android).)*safari/i.test(navigator.userAgent) &&
       !/chrome/i.test(navigator.userAgent);
 
     if (isSafari) {
-      // Safari：使用 fetch HEAD + no-cors 检测
       const controller = new AbortController();
       const timeout = setTimeout(() => {
         controller.abort();
@@ -140,7 +71,6 @@ export function checkImageAccessible(url: string): Promise<boolean> {
       return;
     }
 
-    // Chrome/Edge/Firefox：使用 Image 加载检测（带重试）
     const tryLoad = (attempt: number) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
@@ -267,77 +197,127 @@ export async function uploadHanziToCloudinary(
   fileName: string,
   styleConfig: HanziStyleConfig,
 ): Promise<string> {
-  const timestamp = Date.now();
-  const styleTag = `${styleConfig.gridType}_${styleConfig.fontSize}`;
-  const publicId = `hanzi_${fileName}_${styleTag}_${timestamp}`;
-  const file = dataUrlToFile(dataUrl, publicId);
+  // 用"字符+网格+字号+字体"作为唯一锁键，确保同字同样式只传一次
+  const lockKey = `${char}_${styleConfig.gridType}_${styleConfig.fontSize}_${styleConfig.fontFamily}`;
 
-  const isEnglish = /^[a-zA-Z]+$/.test(char);
-  const category = isEnglish ? "英文" : "汉字";
+  // 如果已有相同任务在上传中，直接等待其结果复用
+  if (uploadingLocks.has(lockKey)) {
+    logDebug(`"${char}" 正在上传中，等待结果...`);
+    return await uploadingLocks.get(lockKey)!;
+  }
 
-  const { data: existing } = await supabase
-    .from("cloud_images")
-    .select("url, public_id")
-    .eq("name", char)
-    .eq("category", category)
-    .maybeSingle();
+  // 创建上传任务
+  const uploadPromise = (async (): Promise<string> => {
+    const timestamp = Date.now();
+    const styleTag = `${styleConfig.gridType}_${styleConfig.fontSize}`;
+    const publicId = `hanzi_${fileName}_${styleTag}_${timestamp}`;
+    const file = dataUrlToFile(dataUrl, publicId);
 
-  if (existing) {
-    const isAccessible = await checkImageAccessible(existing.url);
-    if (isAccessible) {
-      logDebug(`${category}图片已存在，直接复用`, existing.url);
+    const isEnglish = /^[a-zA-Z]+$/.test(char);
+    const category = isEnglish ? "英文" : "汉字";
+
+    // 1. 查 Supabase 是否已有记录
+    const { data: existing } = await supabase
+      .from("cloud_images")
+      .select("url, public_id")
+      .eq("name", char)
+      .eq("category", category)
+      .maybeSingle();
+    // ========== 关键修复：直接复用 Supabase 记录，不再用 checkImageAccessible 阻塞 ==========
+    // 原因：前端无法删除 Cloudinary 文件，记录一旦写入就不会失效；
+    // checkImageAccessible 在弱网/Safari/CORS 限制下极易误判，导致重复上传
+    if (existing?.url) {
+      logDebug(
+        `${category} "${char}" 已存在（Supabase），直接复用`,
+        existing.url,
+      );
       return existing.url;
     }
-  }
 
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", UPLOAD_PRESET);
-  formData.append("folder", "literacy-cards/hanzi");
-  formData.append("public_id", publicId);
-  formData.append(
-    "tags",
-    `${isEnglish ? "english" : "hanzi"},${styleConfig.gridType},literacy`,
-  );
+    // 2. 上传前最终竞态检查
+    const { data: raceCheck } = await supabase
+      .from("cloud_images")
+      .select("url")
+      .eq("name", char)
+      .eq("category", category)
+      .maybeSingle();
 
-  const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
-  const res = await fetch(url, { method: "POST", body: formData });
-
-  if (!res.ok) {
-    const error = await res.json();
-    logError("Cloudinary 上传失败", error);
-    logDebug("尝试降级到 GitHub 存储...");
-    try {
-      return await uploadImageToGitHub(file);
-    } catch (githubError) {
-      throw new Error(
-        `上传失败 (Cloudinary: ${error.error?.message || "未知"}, GitHub: ${githubError})`,
-      );
+    if (raceCheck?.url) {
+      logDebug("并发保护：其他线程已上传，直接复用", raceCheck.url);
+      return raceCheck.url;
     }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", UPLOAD_PRESET);
+    formData.append("folder", "literacy-cards/hanzi");
+    formData.append("public_id", publicId);
+    formData.append(
+      "tags",
+      `${isEnglish ? "english" : "hanzi"},${styleConfig.gridType},literacy`,
+    );
+
+    const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+    logDebug("上传到 Cloudinary", url);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const error = await res.json();
+        logError("Cloudinary 上传失败", error);
+        throw new Error(
+          error.error?.message || `Upload failed (${res.status})`,
+        );
+      }
+
+      const data = await res.json();
+      logDebug("上传成功", data.secure_url);
+
+      const { error } = await supabase.from("cloud_images").insert({
+        name: char,
+        url: data.secure_url,
+        public_id: data.public_id,
+        category: category,
+        metadata: {
+          gridType: styleConfig.gridType,
+          fontSize: styleConfig.fontSize,
+          color: styleConfig.color,
+          bgColor: styleConfig.bgColor,
+          fontFamily: styleConfig.fontFamily,
+        },
+      });
+
+      if (error) {
+        logError("Supabase 插入错误", error);
+      }
+
+      return data.secure_url;
+    } catch (e) {
+      clearTimeout(timeout);
+      const errorMsg = e instanceof Error ? e.message : "未知错误";
+      logError("Cloudinary 上传失败", errorMsg);
+      throw new Error(`Cloudinary 上传失败: ${errorMsg}`);
+    }
+  })();
+
+  // 注册到全局锁
+  uploadingLocks.set(lockKey, uploadPromise);
+
+  try {
+    return await uploadPromise;
+  } finally {
+    // 无论成功失败，释放锁
+    uploadingLocks.delete(lockKey);
   }
-
-  const data = await res.json();
-  logDebug("上传成功", data.secure_url);
-
-  const { error } = await supabase.from("cloud_images").insert({
-    name: char,
-    url: data.secure_url,
-    public_id: data.public_id,
-    category: category,
-    metadata: {
-      gridType: styleConfig.gridType,
-      fontSize: styleConfig.fontSize,
-      color: styleConfig.color,
-      bgColor: styleConfig.bgColor,
-      fontFamily: styleConfig.fontFamily,
-    },
-  });
-
-  if (error) {
-    logError("Supabase 插入错误", error);
-  }
-
-  return data.secure_url;
 }
 
 export async function getCloudinaryImages() {
@@ -700,7 +680,7 @@ export async function cleanInvalidCloudImages(): Promise<CleanResult> {
   return result;
 }
 
-// ========== 从本地图库恢复 Supabase 记录（不重新上传文件）==========
+// 从本地图库恢复 Supabase 记录（不重新上传文件）
 export async function restoreCloudRecordsFromLocal(
   localImages: { src: string; name: string; category?: string }[],
 ): Promise<RebuildResult> {
@@ -800,4 +780,38 @@ export async function uploadDataUrlToCloudinary(
 ): Promise<string> {
   const file = dataUrlToFile(dataUrl, fileName);
   return uploadImageToCloudinary(file);
+}
+// ========== 新增：通过 URL 删除 Supabase 云端索引 ==========
+export async function deleteCloudImageByUrl(url: string): Promise<boolean> {
+  if (!url?.includes("res.cloudinary.com")) return false;
+
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split("/");
+    const uploadIndex = pathParts.indexOf("upload");
+    if (uploadIndex === -1) return false;
+
+    let startIdx = uploadIndex + 1;
+    if (pathParts[startIdx]?.startsWith("v")) startIdx++;
+    const filePart = pathParts.slice(startIdx).join("/");
+    const publicId = filePart.replace(/\.[^/.]+$/, "");
+
+    if (!publicId || isCloudinarySample(publicId)) return false;
+
+    const { error } = await supabase
+      .from("cloud_images")
+      .delete()
+      .eq("public_id", publicId);
+
+    if (error) {
+      logError("删除 Supabase 记录失败", error);
+      return false;
+    }
+
+    logDebug("已删除 Supabase 记录", publicId);
+    return true;
+  } catch (e) {
+    logError("deleteCloudImageByUrl 失败", e);
+    return false;
+  }
 }

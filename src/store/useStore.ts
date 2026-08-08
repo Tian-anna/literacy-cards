@@ -65,11 +65,10 @@ export const checkStorage = async () => {
 // ==================== Store 接口 ====================
 interface StoreState {
   images: CardImage[];
-  // ========== 修改：支持传入自定义 id，并返回实际 id ==========
   addImage: (
     image: Omit<CardImage, "id" | "createdAt"> & { id?: string },
   ) => string;
-  updateImage: (id: string, updates: Partial<CardImage>) => void; // ← 加这里
+  updateImage: (id: string, updates: Partial<CardImage>) => void;
   removeImage: (id: string) => void;
 
   scenes: Scene[];
@@ -236,43 +235,58 @@ export const useStore = create<StoreState>()(
           ),
         })),
 
-      // ========== 修改：支持传入自定义 id，并返回实际 id ==========
+      // ========== 修改：addImage 正确返回已有 ID，避免幽灵重复 ==========
       addImage: (image) => {
+        const state = get();
+        const existing = state.images.find(
+          (img) =>
+            img.name === image.name &&
+            img.category === (image.category || "未分类"),
+        );
+        if (existing) {
+          console.log("[Store] 图片已存在，复用 ID:", image.name, existing.id);
+          return existing.id;
+        }
+
         const id = image.id || crypto.randomUUID();
-        set((state: StoreState) => {
-          const exists = state.images.some(
-            (img) => img.src === image.src || img.name === image.name,
-          );
-          if (exists) {
-            console.log("图片已存在，跳过:", image.name);
-            return state;
-          }
-          return {
-            images: [
-              ...state.images,
-              {
-                ...image,
-                id,
-                createdAt: Date.now(),
-                category: image.category || "未分类",
-              } as CardImage,
-            ],
-          };
-        });
+        set((state: StoreState) => ({
+          images: [
+            ...state.images,
+            {
+              ...image,
+              id,
+              createdAt: Date.now(),
+              category: image.category || "未分类",
+            } as CardImage,
+          ],
+        }));
         return id;
       },
-      // ← 在这里插入 updateImage
+
       updateImage: (id, updates) =>
         set((state: StoreState) => ({
           images: state.images.map((img) =>
             img.id === id ? { ...img, ...updates } : img,
           ),
         })),
-      removeImage: (id) =>
+
+      // ========== 修改：removeImage 同步删除 Supabase 云端索引 ==========
+      removeImage: (id) => {
+        const image = get().images.find((img) => img.id === id);
+        if (image?.src?.includes("res.cloudinary.com")) {
+          // 异步删除 Supabase 记录，不阻塞 UI
+          import("@/utils/cloudinaryApi")
+            .then(({ deleteCloudImageByUrl }) => {
+              deleteCloudImageByUrl(image.src).catch(console.error);
+            })
+            .catch(console.error);
+        }
+
         set((state: StoreState) => ({
           images: state.images.filter((img) => img.id !== id),
           placedCards: state.placedCards.filter((card) => card.imageId !== id),
-        })),
+        }));
+      },
 
       createScene: (name) => {
         const id = uuidv4();

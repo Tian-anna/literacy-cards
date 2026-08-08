@@ -1,16 +1,17 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
 import { useStore } from "@/store/useStore";
-// 改为：兼容生产构建的导入
 import pinyinModule from "pinyin";
+import {
+  uploadHanziToCloudinary,
+  HanziStyleConfig,
+} from "@/utils/cloudinaryApi";
+
+// ========== 生产构建兼容：pinyin 导入容错 ==========
 const pinyin = (
   typeof pinyinModule === "function"
     ? pinyinModule
     : (pinyinModule as any).default || (pinyinModule as any)
 ) as typeof pinyinModule;
-import {
-  uploadHanziToCloudinary,
-  HanziStyleConfig,
-} from "@/utils/cloudinaryApi";
 
 interface HanziGeneratorProps {
   onAddToCanvas?: (imageId: string) => void;
@@ -56,24 +57,30 @@ const GRID_COLOR = "#e74c3c";
 const GRID_LINE_WIDTH = 1;
 const BORDER_LINE_WIDTH = 2;
 
+// 中文转拼音命名（英文保持原样）
 function getCloudFileName(char: string): string {
   if (/^[a-zA-Z]+$/.test(char)) {
     return char.toLowerCase();
   }
-  const py = pinyin(char, {
-    style: pinyin.STYLE_NORMAL,
-    segment: false,
-  });
-  return py.flat().join("").toLowerCase() || char;
+  try {
+    const py = pinyin(char, {
+      style: pinyin.STYLE_NORMAL,
+      segment: false,
+    });
+    return py.flat().join("").toLowerCase() || char;
+  } catch (e) {
+    console.warn("pinyin 转换失败，使用原始字符:", char, e);
+    return char;
+  }
 }
 
-// 让出主线程
+// 让出主线程，防止 UI 卡死
 function yieldToMain(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
-  const { addImage, updateImage } = useStore(); // 假设 store 有 updateImage，如果没有见下方备选方案
+  const { addImage } = useStore();
   const [inputText, setInputText] = useState("");
   const [gridType, setGridType] = useState<GridType>("tian");
   const [fontSize, setFontSize] = useState(280);
@@ -88,9 +95,10 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     total: number;
   } | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
-
-  // 后台同步状态
   const [syncingCount, setSyncingCount] = useState(0);
+
+  // ========== 修复：按钮防重（useRef 立即锁定）==========
+  const isSubmittingRef = useRef(false);
 
   const detectContentType = useCallback((text: string): ContentType => {
     const trimmed = text.trim();
@@ -315,7 +323,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
     };
   }, [inputText, parseInput, detectContentType, generateImage]);
 
-  // ========== 核心优化：后台静默同步云端 ==========
+  // 后台静默同步云端
   const syncToCloudInBackground = useCallback(
     async (
       imageId: string,
@@ -324,6 +332,7 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
       styleConfig: HanziStyleConfig,
     ) => {
       setSyncingCount((c) => c + 1);
+      console.log(`[Sync] 开始上传 "${content}"...`);
       try {
         const fileName = getCloudFileName(content);
         const cloudUrl = await uploadHanziToCloudinary(
@@ -333,21 +342,18 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
           styleConfig,
         );
 
-        // 上传成功后，更新本地图片为云端 URL
-        // 方案A：如果 store 有 updateImage
+        console.log(`[Sync] "${content}" 上传成功:`, cloudUrl);
+
         const { updateImage } = useStore.getState();
         if (updateImage) {
           updateImage(imageId, { src: cloudUrl });
         } else {
-          // 方案B：手动替换（备选）
           const store = useStore.getState();
           const img = store.images.find((i) => i.id === imageId);
-          if (img) {
-            img.src = cloudUrl;
-          }
+          if (img) img.src = cloudUrl;
         }
       } catch (error) {
-        console.warn(`"${content}" 云端同步失败，保留本地版本`, error);
+        console.error(`[Sync] "${content}" 上传失败:`, error);
       } finally {
         setSyncingCount((c) => Math.max(0, c - 1));
       }
@@ -357,99 +363,139 @@ const HanziGenerator: React.FC<HanziGeneratorProps> = ({ onAddToCanvas }) => {
 
   const handleCreate = useCallback(
     async (mode: "library" | "canvas") => {
-      const contents = parseInput(inputText);
-      if (contents.length === 0) {
-        alert("请输入汉字或英文单词");
-        return;
-      }
+      // ========== 修复1：按钮防重（useRef 立即锁定，无视 React 渲染延迟）==========
+      if (isSubmittingRef.current) return;
+      isSubmittingRef.current = true;
 
-      if (contents.length > 100) {
-        if (!confirm(`即将生成 ${contents.length} 张图片，继续吗？`)) {
+      try {
+        const contents = parseInput(inputText);
+        if (contents.length === 0) {
+          alert("请输入汉字或英文单词");
           return;
         }
-      }
 
-      const contentType = detectContentType(inputText);
-      const isHanzi = contentType === "hanzi";
-      const imgWidth = isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH;
-      const imgHeight = isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT;
-
-      setIsProcessing(true);
-      setUploadProgress({ current: 0, total: contents.length });
-
-      const styleConfig: HanziStyleConfig = {
-        gridType,
-        fontSize,
-        color: "#000000",
-        bgColor: "#ffffff",
-        fontFamily: getCurrentFontFamily(contentType),
-      };
-
-      const uploadedIds: string[] = [];
-
-      for (let i = 0; i < contents.length; i++) {
-        const content = contents[i];
-        const dataUrl = generateImage(content, contentType);
-        if (!dataUrl) continue;
-
-        const tempId = `word-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`;
-
-        // ========== 关键优化：先本地立即入库，用户立刻可用 ==========
-        const actualId = addImage({
-          id: tempId,
-          src: dataUrl, // 先用本地 base64，瞬间完成
-          name: content,
-          category: isHanzi ? "汉字" : "英文",
-          width: imgWidth,
-          height: imgHeight,
-        });
-
-        const imageId = actualId || tempId;
-        uploadedIds.push(imageId);
-
-        // 单字直接拼图 —— 立刻放到画布，不等待网络
-        if (mode === "canvas" && contents.length === 1) {
-          onAddToCanvas?.(imageId);
+        if (contents.length > 100) {
+          if (!confirm(`即将生成 ${contents.length} 张图片，继续吗？`)) return;
         }
 
-        // ========== 关键优化：云端同步改为后台异步，不阻塞 UI ==========
-        if (uploadToCloud) {
-          // 不 await！让它后台跑
-          syncToCloudInBackground(imageId, dataUrl, content, styleConfig);
-        }
+        const contentType = detectContentType(inputText);
+        const isHanzi = contentType === "hanzi";
+        const imgWidth = isHanzi ? HANZI_WIDTH : ENGLISH_WIDTH;
+        const imgHeight = isHanzi ? HANZI_HEIGHT : ENGLISH_HEIGHT;
 
-        setUploadProgress({ current: i + 1, total: contents.length });
+        setIsProcessing(true);
+        setUploadProgress({ current: 0, total: contents.length });
 
-        if ((i + 1) % 5 === 0) {
-          await yieldToMain();
-        }
-      }
+        const styleConfig: HanziStyleConfig = {
+          gridType,
+          fontSize,
+          color: "#000000",
+          bgColor: "#ffffff",
+          fontFamily: getCurrentFontFamily(contentType),
+        };
 
-      setIsProcessing(false);
-      setUploadProgress(null);
-
-      if (mode === "library") {
-        // 不再弹 alert，避免打断用户
-        console.log(
-          `${contents.length} 个${isHanzi ? "汉字" : "单词"}已保存本地` +
-            (uploadToCloud ? "，云端同步后台进行中..." : ""),
-        );
-      } else if (contents.length > 1) {
+        const uploadedIds: string[] = [];
         const store = useStore.getState();
-        const cols = Math.ceil(Math.sqrt(contents.length));
-        const gap = isHanzi ? 160 : 320;
-        const startX = 100,
-          startY = 100;
-        uploadedIds.forEach((id, idx) =>
-          store.addCardToScene(
-            id,
-            startX + (idx % cols) * gap,
-            startY + Math.floor(idx / cols) * gap,
-          ),
-        );
-      }
 
-      setInputText("");
+        // ========== 修复2：本次 batch 内去重（输入"我我我"只处理一次）==========
+        const processedInBatch = new Map<string, string>();
+
+        for (let i = 0; i < contents.length; i++) {
+          const content = contents[i];
+
+          // Batch 内已处理过，直接复用 ID
+          if (processedInBatch.has(content)) {
+            const existingId = processedInBatch.get(content)!;
+            uploadedIds.push(existingId);
+            console.log(`[Batch] "${content}" 本次已处理，直接复用`);
+            if (mode === "canvas" && contents.length === 1) {
+              onAddToCanvas?.(existingId);
+            }
+            setUploadProgress({ current: i + 1, total: contents.length });
+            continue;
+          }
+
+          // ========== 修复3：本地图库查重（跨 session，清空后也能防重）==========
+          const existingLocal = store.images.find(
+            (img) =>
+              img.name === content &&
+              img.category === (isHanzi ? "汉字" : "英文"),
+          );
+
+          if (existingLocal) {
+            processedInBatch.set(content, existingLocal.id);
+            uploadedIds.push(existingLocal.id);
+            console.log(`[Local] "${content}" 本地已存在，直接复用`);
+            if (mode === "canvas" && contents.length === 1) {
+              onAddToCanvas?.(existingLocal.id);
+            }
+            setUploadProgress({ current: i + 1, total: contents.length });
+            continue;
+          }
+
+          // 生成新图片
+          const dataUrl = generateImage(content, contentType);
+          if (!dataUrl) continue;
+
+          const tempId = `word-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`;
+
+          const actualId = addImage({
+            id: tempId,
+            src: dataUrl,
+            name: content,
+            category: isHanzi ? "汉字" : "英文",
+            width: imgWidth,
+            height: imgHeight,
+          });
+
+          const imageId = actualId || tempId;
+          processedInBatch.set(content, imageId);
+          uploadedIds.push(imageId);
+
+          if (mode === "canvas" && contents.length === 1) {
+            onAddToCanvas?.(imageId);
+          }
+
+          // 后台同步云端（不 await，不阻塞 UI）
+          if (uploadToCloud) {
+            syncToCloudInBackground(imageId, dataUrl, content, styleConfig);
+          }
+
+          setUploadProgress({ current: i + 1, total: contents.length });
+
+          if ((i + 1) % 5 === 0) {
+            await yieldToMain();
+          }
+        }
+
+        setIsProcessing(false);
+        setUploadProgress(null);
+
+        if (mode === "library") {
+          console.log(
+            `${contents.length} 个${isHanzi ? "汉字" : "单词"}已保存本地` +
+              (uploadToCloud ? "，云端同步后台进行中..." : ""),
+          );
+        } else if (contents.length > 1) {
+          const cols = Math.ceil(Math.sqrt(contents.length));
+          const gap = isHanzi ? 160 : 320;
+          const startX = 100,
+            startY = 100;
+          uploadedIds.forEach((id, idx) =>
+            store.addCardToScene(
+              id,
+              startX + (idx % cols) * gap,
+              startY + Math.floor(idx / cols) * gap,
+            ),
+          );
+        }
+
+        setInputText("");
+      } finally {
+        // 释放锁定
+        isSubmittingRef.current = false;
+        setIsProcessing(false);
+      }
     },
     [
       inputText,
